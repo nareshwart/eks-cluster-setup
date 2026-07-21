@@ -2,13 +2,38 @@
 set -euo pipefail
 
 if [ $# -ne 2 ]; then
-  echo "Usage: $0 <region> <vpc-id>"
+  echo "Usage: $0 <region> <vpc-id|vpc-name>"
   exit 1
 fi
 
 REGION="$1"
-VPC_ID="$2"
+VPC_REF="$2"
 MAX_WAIT_SECONDS="${MAX_WAIT_SECONDS:-900}"
+
+if [[ "$VPC_REF" == vpc-* ]]; then
+  VPC_ID="$VPC_REF"
+else
+  mapfile -t MATCHING_VPCS < <(aws ec2 describe-vpcs \
+    --region "$REGION" \
+    --filters Name=tag:Name,Values="$VPC_REF" \
+    --query 'Vpcs[].VpcId' \
+    --output text | tr '\t' '\n')
+
+  if [ "${#MATCHING_VPCS[@]}" -eq 0 ]; then
+    echo "No VPC found with Name tag: $VPC_REF"
+    exit 1
+  fi
+
+  if [ "${#MATCHING_VPCS[@]}" -gt 1 ]; then
+    echo "Multiple VPCs found with Name tag '$VPC_REF':"
+    printf '  %s\n' "${MATCHING_VPCS[@]}"
+    echo "Use the VPC ID to avoid deleting the wrong VPC."
+    exit 1
+  fi
+
+  VPC_ID="${MATCHING_VPCS[0]}"
+  echo "Resolved VPC name '$VPC_REF' to $VPC_ID"
+fi
 
 report_dependencies() {
   echo

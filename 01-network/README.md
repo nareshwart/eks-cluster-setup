@@ -14,8 +14,9 @@ The script creates:
 - Secondary VPC CIDR `100.64.0.0/16`
 - 3 pod subnets for VPC CNI custom networking
 
-Delete a VPC after the cluster and load balancers are gone:
+Delete a VPC after the cluster and load balancers are gone. You can pass either the VPC ID or the VPC `Name` tag:
 
 ```bash
 ./01-network/delete-vpc.sh us-east-2 vpc-xxxxxxxx
+./01-network/delete-vpc.sh us-east-2 student1-vpc
 ```
