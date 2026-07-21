@@ -62,7 +62,10 @@ for SUBNET_ID in $(aws ec2 describe-subnets --region "$REGION" --filters Name=vp
   aws ec2 delete-subnet --region "$REGION" --subnet-id "$SUBNET_ID"
 done
 
-for ROUTE_TABLE_ID in $(aws ec2 describe-route-tables --region "$REGION" --filters Name=vpc-id,Values="$VPC_ID" --query 'RouteTables[?Associations[?Main==`false`]].RouteTableId' --output text); do
+MAIN_ROUTE_TABLE_ID="$(aws ec2 describe-route-tables --region "$REGION" --filters Name=vpc-id,Values="$VPC_ID" --query 'RouteTables[?Associations[?Main==`true`]].RouteTableId | [0]' --output text)"
+
+for ROUTE_TABLE_ID in $(aws ec2 describe-route-tables --region "$REGION" --filters Name=vpc-id,Values="$VPC_ID" --query 'RouteTables[].RouteTableId' --output text); do
+  [ "$ROUTE_TABLE_ID" = "$MAIN_ROUTE_TABLE_ID" ] && continue
   for ASSOCIATION_ID in $(aws ec2 describe-route-tables --region "$REGION" --route-table-ids "$ROUTE_TABLE_ID" --query 'RouteTables[0].Associations[?Main==`false`].RouteTableAssociationId' --output text); do
     aws ec2 disassociate-route-table --region "$REGION" --association-id "$ASSOCIATION_ID" || true
   done
@@ -74,12 +77,14 @@ for IGW_ID in $(aws ec2 describe-internet-gateways --region "$REGION" --filters 
   aws ec2 delete-internet-gateway --region "$REGION" --internet-gateway-id "$IGW_ID" || true
 done
 
-for ASSOCIATION_ID in $(aws ec2 describe-vpcs --region "$REGION" --vpc-ids "$VPC_ID" --query 'Vpcs[0].CidrBlockAssociationSet[?IsPrimary==`false`].AssociationId' --output text); do
+PRIMARY_CIDR="$(aws ec2 describe-vpcs --region "$REGION" --vpc-ids "$VPC_ID" --query 'Vpcs[0].CidrBlock' --output text)"
+
+for ASSOCIATION_ID in $(aws ec2 describe-vpcs --region "$REGION" --vpc-ids "$VPC_ID" --query "Vpcs[0].CidrBlockAssociationSet[?CidrBlock!='${PRIMARY_CIDR}'].AssociationId" --output text); do
   aws ec2 disassociate-vpc-cidr-block --region "$REGION" --association-id "$ASSOCIATION_ID" || true
 done
 
 while true; do
-  SECONDARY_CIDRS="$(aws ec2 describe-vpcs --region "$REGION" --vpc-ids "$VPC_ID" --query 'Vpcs[0].CidrBlockAssociationSet[?IsPrimary==`false`].CidrBlock' --output text)"
+  SECONDARY_CIDRS="$(aws ec2 describe-vpcs --region "$REGION" --vpc-ids "$VPC_ID" --query "Vpcs[0].CidrBlockAssociationSet[?CidrBlock!='${PRIMARY_CIDR}'].CidrBlock" --output text)"
   [ -z "$SECONDARY_CIDRS" ] && break
   echo "Waiting for secondary CIDR disassociation: $SECONDARY_CIDRS"
   sleep 10
