@@ -12,6 +12,9 @@ iam:
 accessConfig:
   authenticationMode: API_AND_CONFIG_MAP
 
+upgradePolicy:
+  supportType: STANDARD
+
 # cloudWatch:
 #   clusterLogging:
 #     enableTypes:
@@ -38,7 +41,7 @@ managedNodeGroups:
     desiredCapacity: 2
     minSize: 2
     maxSize: 3
-    volumeSize: 10
+    volumeSize: 20
     labels:
       role: worker
     tags:

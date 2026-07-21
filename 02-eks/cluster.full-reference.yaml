@@ -1,0 +1,375 @@
+# Reference-only eksctl ClusterConfig.
+# Do not use this file directly for labs. Copy the options you need into cluster.yaml.
+# Full schema reference: https://schema.eksctl.io/
+
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: demo-cluster
+  region: us-east-2
+  version: "1.35"
+
+tags:
+  Project: EKS-Training
+  Environment: Lab
+  Owner: student1
+
+annotations:
+  purpose: reference-template
+
+autoModeConfig:
+  enabled: false
+  nodeRoleARN: arn:aws:iam::123456789012:role/eks-auto-mode-node-role
+  nodePools:
+    - system
+    - general-purpose
+
+availabilityZones:
+  - us-east-2a
+  - us-east-2b
+  - us-east-2c
+
+localZones:
+  - us-east-2-lax-1a
+
+outpost:
+  controlPlaneOutpostARN: arn:aws:outposts:us-east-2:123456789012:outpost/op-0123456789abcdef0
+  controlPlaneInstanceType: m5.large
+  controlPlanePlacement:
+    groupName: eks-outpost-placement-group
+
+upgradePolicy:
+  supportType: STANDARD
+
+accessConfig:
+  authenticationMode: API_AND_CONFIG_MAP
+  bootstrapClusterCreatorAdminPermissions: true
+  accessEntries:
+    - principalARN: arn:aws:iam::123456789012:role/trainer-admin
+      accessPolicies:
+        - policyARN: arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
+          accessScope:
+            type: cluster
+    - principalARN: arn:aws:iam::123456789012:user/student1
+      accessPolicies:
+        - policyARN: arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy
+          accessScope:
+            type: namespace
+            namespaces:
+              - default
+
+kubernetesNetworkConfig:
+  ipFamily: IPv4
+  serviceIPv4CIDR: 172.20.0.0/16
+
+remoteNetworkConfig:
+  remoteNodeNetworks:
+    - cidrs:
+        - 10.60.0.0/16
+  remotePodNetworks:
+    - cidrs:
+        - 10.61.0.0/16
+
+privateCluster:
+  enabled: false
+  skipEndpointCreation: false
+  additionalEndpointServices:
+    - cloudformation
+    - autoscaling
+    - logs
+
+vpc:
+  id: vpc-0123456789abcdef0
+  cidr: 10.50.0.0/16
+  ipv6Cidr: 2600:1f16:abcd:1200::/56
+  ipv6Pool: amazon
+  clusterEndpoints:
+    publicAccess: true
+    privateAccess: true
+  publicAccessCIDRs:
+    - 203.0.113.10/32
+  manageSharedNodeSecurityGroupRules: true
+  autoAllocateIPv6: false
+  hostnameType: resource-name
+  controlPlaneEgressMode: AWSMANAGED
+  nat:
+    gateway: Disable
+  subnets:
+    public:
+      us-east-2a:
+        id: subnet-11111111111111111
+        cidr: 10.50.1.0/24
+      us-east-2b:
+        id: subnet-22222222222222222
+        cidr: 10.50.2.0/24
+      us-east-2c:
+        id: subnet-33333333333333333
+        cidr: 10.50.3.0/24
+    private:
+      us-east-2a:
+        id: subnet-aaaaaaaaaaaaaaaaa
+        cidr: 10.50.101.0/24
+      us-east-2b:
+        id: subnet-bbbbbbbbbbbbbbbbb
+        cidr: 10.50.102.0/24
+      us-east-2c:
+        id: subnet-ccccccccccccccccc
+        cidr: 10.50.103.0/24
+  sharedNodeSecurityGroup: sg-0123456789abcdef0
+  securityGroup: sg-11111111111111111
+  extraCIDRs:
+    - 100.64.0.0/16
+  extraIPv6CIDRs:
+    - 2600:1f16:abcd:1300::/56
+
+iam:
+  withOIDC: true
+  serviceRoleARN: arn:aws:iam::123456789012:role/eks-cluster-service-role
+  serviceRolePermissionsBoundary: arn:aws:iam::123456789012:policy/permission-boundary
+  vpcResourceControllerPolicy: true
+  fargatePodExecutionRoleARN: arn:aws:iam::123456789012:role/eks-fargate-pod-execution
+  fargatePodExecutionRolePermissionsBoundary: arn:aws:iam::123456789012:policy/permission-boundary
+  serviceAccounts:
+    - metadata:
+        name: aws-load-balancer-controller
+        namespace: kube-system
+        labels:
+          app.kubernetes.io/name: aws-load-balancer-controller
+      attachPolicyARNs:
+        - arn:aws:iam::123456789012:policy/AWSLoadBalancerControllerIAMPolicy
+      roleName: AmazonEKSLoadBalancerControllerRole
+      permissionsBoundary: arn:aws:iam::123456789012:policy/permission-boundary
+      roleOnly: false
+      tags:
+        Project: EKS-Training
+  podIdentityAssociations:
+    - namespace: kube-system
+      serviceAccountName: ebs-csi-controller-sa
+      roleARN: arn:aws:iam::123456789012:role/AmazonEKS_EBS_CSI_DriverRole
+
+iamIdentityMappings:
+  - arn: arn:aws:iam::123456789012:role/legacy-admin-role
+    username: legacy-admin
+    groups:
+      - system:masters
+  - account: "123456789012"
+
+secretsEncryption:
+  keyARN: arn:aws:kms:us-east-2:123456789012:key/11111111-2222-3333-4444-555555555555
+
+cloudWatch:
+  clusterLogging:
+    enableTypes:
+      - api
+      - audit
+      - authenticator
+      - controllerManager
+      - scheduler
+    logRetentionInDays: 7
+
+addonsConfig:
+  autoApplyPodIdentityAssociations: true
+  disableDefaultAddons: false
+
+addons:
+  - name: vpc-cni
+    version: latest
+    resolveConflicts: overwrite
+    configurationValues: |-
+      env:
+        ENABLE_PREFIX_DELEGATION: "true"
+        WARM_PREFIX_TARGET: "1"
+  - name: coredns
+    version: latest
+    resolveConflicts: overwrite
+  - name: kube-proxy
+    version: latest
+    resolveConflicts: overwrite
+  - name: eks-pod-identity-agent
+    version: latest
+  - name: aws-ebs-csi-driver
+    version: latest
+    serviceAccountRoleARN: arn:aws:iam::123456789012:role/AmazonEKS_EBS_CSI_DriverRole
+    namespaceConfig:
+      namespace: kube-system
+    wellKnownPolicies:
+      ebsCSIController: true
+    tags:
+      Project: EKS-Training
+  - name: aws-efs-csi-driver
+    version: latest
+    wellKnownPolicies:
+      efsCSIController: true
+
+managedNodeGroups:
+  - name: managed-workers
+    amiFamily: AmazonLinux2023
+    instanceType: t3.medium
+    instanceTypes:
+      - t3.medium
+      - t3a.medium
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 4
+    maxPodsPerNode: 58
+    volumeSize: 30
+    volumeType: gp3
+    volumeEncrypted: true
+    volumeKmsKeyID: arn:aws:kms:us-east-2:123456789012:key/11111111-2222-3333-4444-555555555555
+    volumeIOPS: 3000
+    volumeThroughput: 125
+    privateNetworking: false
+    disableIMDSv1: true
+    disablePodIMDS: false
+    efaEnabled: false
+    availabilityZones:
+      - us-east-2a
+      - us-east-2b
+    subnets:
+      - subnet-11111111111111111
+      - subnet-22222222222222222
+    labels:
+      role: worker
+      lifecycle: on-demand
+    taints:
+      - key: dedicated
+        value: training
+        effect: NoSchedule
+    tags:
+      Project: EKS-Training
+      NodeGroup: managed-workers
+    securityGroups:
+      attachIDs:
+        - sg-22222222222222222
+      withShared: true
+    ssh:
+      allow: true
+      publicKeyName: eks-training-key
+      enableSsm: true
+      sourceSecurityGroupIds:
+        - sg-33333333333333333
+    iam:
+      instanceRoleARN: arn:aws:iam::123456789012:role/eks-node-instance-role
+      withAddonPolicies:
+        autoScaler: true
+        cloudWatch: true
+        ebs: true
+        efs: true
+        albIngress: true
+    updateConfig:
+      maxUnavailable: 1
+      maxUnavailablePercentage: 25
+    nodeRepairConfig:
+      enabled: true
+    launchTemplate:
+      id: lt-0123456789abcdef0
+      version: "1"
+    capacityReservation:
+      capacityReservationPreference: open
+      capacityReservationTarget:
+        capacityReservationID: cr-0123456789abcdef0
+    placement:
+      groupName: eks-managed-placement-group
+    preBootstrapCommands:
+      - echo "pre bootstrap command"
+    overrideBootstrapCommand: |
+      #!/bin/bash
+      /etc/eks/bootstrap.sh demo-cluster
+
+nodeGroups:
+  - name: self-managed-workers
+    amiFamily: AmazonLinux2
+    instanceType: t3.medium
+    desiredCapacity: 1
+    minSize: 1
+    maxSize: 2
+    maxPodsPerNode: 58
+    volumeSize: 30
+    volumeType: gp3
+    volumeThroughput: 125
+    privateNetworking: false
+    spot: true
+    instancesDistribution:
+      instanceTypes:
+        - t3.medium
+        - t3a.medium
+      onDemandBaseCapacity: 0
+      onDemandPercentageAboveBaseCapacity: 50
+      spotAllocationStrategy: capacity-optimized
+      capacityRebalance: true
+    instanceSelector:
+      vCPUs: 2
+      memory: 4GiB
+      cpuArchitecture: x86_64
+    containerRuntime: containerd
+    disableIMDSv1: true
+    disablePodIMDS: false
+    localZones:
+      - us-east-2-lax-1a
+    labels:
+      role: self-managed
+    tags:
+      Project: EKS-Training
+    securityGroups:
+      attachIDs:
+        - sg-44444444444444444
+      withShared: true
+      withLocal: true
+    ssh:
+      allow: true
+      publicKeyName: eks-training-key
+      enableSsm: true
+    iam:
+      withAddonPolicies:
+        autoScaler: true
+        cloudWatch: true
+    preBootstrapCommands:
+      - echo "install custom packages"
+    overrideBootstrapCommand: |
+      #!/bin/bash
+      /etc/eks/bootstrap.sh demo-cluster
+    placement:
+      groupName: eks-self-managed-placement-group
+    capacityReservation:
+      capacityReservationPreference: none
+    launchTemplate:
+      id: lt-11111111111111111
+      version: "1"
+
+fargateProfiles:
+  - name: fp-default
+    podExecutionRoleARN: arn:aws:iam::123456789012:role/eks-fargate-pod-execution
+    selectors:
+      - namespace: default
+      - namespace: kube-system
+        labels:
+          k8s-app: kube-dns
+    subnets:
+      - subnet-aaaaaaaaaaaaaaaaa
+      - subnet-bbbbbbbbbbbbbbbbb
+    tags:
+      Project: EKS-Training
+
+identityProviders:
+  - name: github-oidc
+    type: oidc
+    issuerURL: https://token.actions.githubusercontent.com
+    clientID: sts.amazonaws.com
+    usernameClaim: sub
+    groupsClaim: groups
+
+karpenter:
+  version: "1.0.0"
+  createServiceAccount: true
+  defaultInstanceProfile: KarpenterNodeInstanceProfile-demo-cluster
+
+gitops:
+  flux:
+    gitProvider: github
+    flags:
+      owner: example-org
+      repository: eks-training-gitops
+      branch: main
+      namespace: flux-system
+      path: clusters/demo-cluster
