@@ -8,6 +8,7 @@ fi
 
 REGION="$1"
 VPC_ID="$2"
+MAX_WAIT_SECONDS="${MAX_WAIT_SECONDS:-900}"
 
 report_dependencies() {
   echo
@@ -83,9 +84,20 @@ for ASSOCIATION_ID in $(aws ec2 describe-vpcs --region "$REGION" --vpc-ids "$VPC
   aws ec2 disassociate-vpc-cidr-block --region "$REGION" --association-id "$ASSOCIATION_ID" || true
 done
 
+WAIT_STARTED_AT="$(date +%s)"
+
 while true; do
-  SECONDARY_CIDRS="$(aws ec2 describe-vpcs --region "$REGION" --vpc-ids "$VPC_ID" --query "Vpcs[0].CidrBlockAssociationSet[?CidrBlock!='${PRIMARY_CIDR}'].CidrBlock" --output text)"
+  SECONDARY_CIDRS="$(aws ec2 describe-vpcs --region "$REGION" --vpc-ids "$VPC_ID" --query "Vpcs[0].CidrBlockAssociationSet[?CidrBlock!='${PRIMARY_CIDR}' && CidrBlockState.State!='disassociated'].CidrBlock" --output text)"
   [ -z "$SECONDARY_CIDRS" ] && break
+  NOW="$(date +%s)"
+  ELAPSED="$((NOW - WAIT_STARTED_AT))"
+  if [ "$ELAPSED" -ge "$MAX_WAIT_SECONDS" ]; then
+    echo "Timed out after ${MAX_WAIT_SECONDS}s waiting for secondary CIDR disassociation: $SECONDARY_CIDRS"
+    echo "AWS does not support force-deleting a VPC while secondary CIDRs are still disassociating."
+    echo "Rerun this script later, or open an AWS Support case if the CIDR remains stuck for more than 30-60 minutes."
+    report_dependencies
+    exit 1
+  fi
   echo "Waiting for secondary CIDR disassociation: $SECONDARY_CIDRS"
   sleep 10
 done
