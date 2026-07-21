@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ $# -ne 2 ]; then
-  echo "Usage: $0 <cluster-name> <region>"
+REGION="us-east-2"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ $# -ne 1 ]; then
+  echo "Usage: $0 <cluster-name>"
+  echo
+  echo "Region is hard-coded to: $REGION"
   exit 1
 fi
 
 CLUSTER_NAME="$1"
-REGION="$2"
 
 VPC_ID="$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION" --query 'cluster.resourcesVpcConfig.vpcId' --output text)"
 CLUSTER_SG="$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION" --query 'cluster.resourcesVpcConfig.clusterSecurityGroupId' --output text)"
@@ -30,7 +34,7 @@ for ROW in "${POD_SUBNETS[@]}"; do
     -e "s/AZ_NAME/${AZ}/g" \
     -e "s/POD_SUBNET_ID/${SUBNET_ID}/g" \
     -e "s/CLUSTER_SECURITY_GROUP_ID/${CLUSTER_SG}/g" \
-    03-custom-networking/eniconfig.yaml | kubectl apply -f -
+    "${SCRIPT_DIR}/eniconfig.yaml" | kubectl apply -f -
 done
 
 kubectl set env daemonset aws-node -n kube-system AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG=true

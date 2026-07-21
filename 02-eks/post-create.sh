@@ -18,6 +18,8 @@ ADMIN_PRINCIPAL="${3:-}"
 CURRENT_CALLER_ARN="$(aws sts get-caller-identity --query Arn --output text)"
 
 echo "Current AWS caller: $CURRENT_CALLER_ARN"
+echo "This identity should already have cluster-admin access if it created the cluster with eksctl."
+echo "This script will configure kubeconfig for the current caller and verify kubectl access."
 
 if [ -n "$ADMIN_PRINCIPAL" ]; then
   if [[ "$ADMIN_PRINCIPAL" == arn:aws:iam::* ]]; then
@@ -54,9 +56,13 @@ if [ -n "$ADMIN_PRINCIPAL" ]; then
   fi
 fi
 
+echo
+echo "Updating kubeconfig for current caller..."
 aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$REGION"
 kubectl config current-context
 
+echo
+echo "Cluster details:"
 aws eks describe-cluster \
   --name "$CLUSTER_NAME" \
   --region "$REGION" \
@@ -78,5 +84,7 @@ The admin principal must use its own AWS credentials and run this once before us
 EOF
 fi
 
+echo
+echo "Verifying Kubernetes access for current caller..."
 kubectl auth can-i get nodes
 kubectl get nodes

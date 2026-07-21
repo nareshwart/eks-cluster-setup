@@ -5,8 +5,10 @@ Enables Amazon VPC CNI custom networking so pods use the secondary VPC CIDR subn
 Run after the EKS cluster is created and kubeconfig is active:
 
 ```bash
-./03-custom-networking/enable-custom-networking.sh student1 us-east-2
+./03-custom-networking/enable-custom-networking.sh student1
 ```
+
+The script uses `us-east-2` as the fixed region.
 
 The script:
 
