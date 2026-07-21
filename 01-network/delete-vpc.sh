@@ -35,6 +35,16 @@ else
   echo "Resolved VPC name '$VPC_REF' to $VPC_ID"
 fi
 
+CLUSTER_TAG="$(aws ec2 describe-vpcs \
+  --region "$REGION" \
+  --vpc-ids "$VPC_ID" \
+  --query "Vpcs[0].Tags[?Key=='Cluster'].Value | [0]" \
+  --output text)"
+
+if [ "$CLUSTER_TAG" = "None" ]; then
+  CLUSTER_TAG=""
+fi
+
 report_dependencies() {
   echo
   echo "VPC deletion is still blocked. Remaining dependencies:"
@@ -84,8 +94,25 @@ report_dependencies() {
   echo "Tip: if this was used by EKS, delete the cluster and Kubernetes Services of type LoadBalancer first."
 }
 
+for NAT_GATEWAY_ID in $(aws ec2 describe-nat-gateways --region "$REGION" --filter Name=vpc-id,Values="$VPC_ID" --query 'NatGateways[?State!=`deleted`].NatGatewayId' --output text); do
+  aws ec2 delete-nat-gateway --region "$REGION" --nat-gateway-id "$NAT_GATEWAY_ID" || true
+done
+
+while true; do
+  NAT_GATEWAYS="$(aws ec2 describe-nat-gateways --region "$REGION" --filter Name=vpc-id,Values="$VPC_ID" --query 'NatGateways[?State!=`deleted`].NatGatewayId' --output text)"
+  [ -z "$NAT_GATEWAYS" ] && break
+  echo "Waiting for NAT Gateway deletion: $NAT_GATEWAYS"
+  sleep 15
+done
+
+if [ -n "$CLUSTER_TAG" ]; then
+  for ALLOCATION_ID in $(aws ec2 describe-addresses --region "$REGION" --filters Name=domain,Values=vpc Name=tag:Cluster,Values="$CLUSTER_TAG" --query 'Addresses[].AllocationId' --output text); do
+    aws ec2 release-address --region "$REGION" --allocation-id "$ALLOCATION_ID" || true
+  done
+fi
+
 for SUBNET_ID in $(aws ec2 describe-subnets --region "$REGION" --filters Name=vpc-id,Values="$VPC_ID" --query 'Subnets[].SubnetId' --output text); do
-  aws ec2 delete-subnet --region "$REGION" --subnet-id "$SUBNET_ID"
+  aws ec2 delete-subnet --region "$REGION" --subnet-id "$SUBNET_ID" || true
 done
 
 MAIN_ROUTE_TABLE_ID="$(aws ec2 describe-route-tables --region "$REGION" --filters Name=vpc-id,Values="$VPC_ID" --query 'RouteTables[?Associations[?Main==`true`]].RouteTableId | [0]' --output text)"
