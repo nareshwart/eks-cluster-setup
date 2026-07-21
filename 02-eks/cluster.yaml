@@ -6,6 +6,21 @@ metadata:
   region: us-east-2
   version: "1.33"
 
+iam:
+  withOIDC: true
+
+accessConfig:
+  authenticationMode: API_AND_CONFIG_MAP
+
+# cloudWatch:
+#   clusterLogging:
+#     enableTypes:
+#       - api
+#       - audit
+#       - authenticator
+#       - controllerManager
+#       - scheduler
+
 vpc:
   id: VPC_ID
   subnets:
@@ -19,18 +34,29 @@ vpc:
 
 managedNodeGroups:
   - name: workers
-    instanceType: t3.medium
+    instanceType: t3.small
     desiredCapacity: 2
     minSize: 2
     maxSize: 3
-    volumeSize: 20
+    volumeSize: 10
     labels:
       role: worker
     tags:
       Project: EKS-Training
+      Cluster: CLUSTER_NAME
+      ManagedBy: eks-platform-scripts
+
+addonsConfig:
+  autoApplyPodIdentityAssociations: true
 
 addons:
   - name: vpc-cni
+    version: latest
   - name: coredns
+    version: latest
   - name: kube-proxy
+    version: latest
   - name: eks-pod-identity-agent
+    version: latest
+  - name: aws-ebs-csi-driver
+    version: latest
