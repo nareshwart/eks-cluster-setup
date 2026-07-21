@@ -11,16 +11,25 @@ Generates and creates an EKS cluster with `eksctl`.
 2. Generate an eksctl config:
 
 ```bash
-./02-eks/eks-training-bootstrap.sh us-east-2 student1 vpc-xxxxxxxx 1.33
+./02-eks/eks-training-bootstrap.sh student1 student1-vpc 1.33
+./02-eks/eks-training-bootstrap.sh student1 vpc-xxxxxxxx 1.33
 ```
 
-3. Create the cluster:
+The bootstrap script uses `us-east-2` as the fixed region.
+
+3. Review the generated YAML:
+
+```bash
+less 02-eks/cluster.generated.yaml
+```
+
+4. Create the cluster manually after review:
 
 ```bash
 eksctl create cluster -f 02-eks/cluster.generated.yaml
 ```
 
-4. Configure local kubeconfig and OIDC:
+5. Configure local kubeconfig and OIDC:
 
 ```bash
 ./02-eks/post-create.sh student1 us-east-2

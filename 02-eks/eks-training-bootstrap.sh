@@ -1,21 +1,50 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ $# -lt 4 ]; then
+REGION="us-east-2"
+
+if [ $# -lt 3 ]; then
   cat <<EOF
-Usage: $0 <region> <cluster-name> <vpc-id> <kubernetes-version>
+Usage: $0 <cluster-name> <vpc-id|vpc-name> <kubernetes-version>
 
 Example:
-  $0 us-east-2 student1 vpc-xxxxxxxx 1.33
+  $0 student1 student1-vpc 1.33
+  $0 student1 vpc-xxxxxxxx 1.33
+
+Region is hard-coded to: $REGION
 EOF
   exit 1
 fi
 
-REGION="$1"
-CLUSTER_NAME="$2"
-VPC_ID="$3"
-K8S_VERSION="$4"
-OUTPUT_FILE="${5:-02-eks/cluster.generated.yaml}"
+CLUSTER_NAME="$1"
+VPC_REF="$2"
+K8S_VERSION="$3"
+OUTPUT_FILE="${4:-02-eks/cluster.generated.yaml}"
+
+if [[ "$VPC_REF" == vpc-* ]]; then
+  VPC_ID="$VPC_REF"
+else
+  mapfile -t MATCHING_VPCS < <(aws ec2 describe-vpcs \
+    --region "$REGION" \
+    --filters Name=tag:Name,Values="$VPC_REF" \
+    --query 'Vpcs[].VpcId' \
+    --output text | tr '\t' '\n')
+
+  if [ "${#MATCHING_VPCS[@]}" -eq 0 ]; then
+    echo "No VPC found in $REGION with Name tag: $VPC_REF"
+    exit 1
+  fi
+
+  if [ "${#MATCHING_VPCS[@]}" -gt 1 ]; then
+    echo "Multiple VPCs found in $REGION with Name tag '$VPC_REF':"
+    printf '  %s\n' "${MATCHING_VPCS[@]}"
+    echo "Use the VPC ID to avoid selecting the wrong VPC."
+    exit 1
+  fi
+
+  VPC_ID="${MATCHING_VPCS[0]}"
+  echo "Resolved VPC name '$VPC_REF' to $VPC_ID"
+fi
 
 mapfile -t PUBLIC_SUBNET_ROWS < <(aws ec2 describe-subnets \
   --region "$REGION" \
@@ -51,7 +80,10 @@ sed \
 cat <<EOF
 Generated $OUTPUT_FILE
 
-Create the cluster:
+Review the generated YAML before creating the cluster:
+  less $OUTPUT_FILE
+
+After review, create the cluster manually:
   eksctl create cluster -f $OUTPUT_FILE
 
 After creation:
