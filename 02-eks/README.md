@@ -49,11 +49,25 @@ If you run the bootstrap script from inside `02-eks`, the generated file is `clu
 ./02-eks/post-create.sh student1 us-east-2
 ```
 
+This configures kubeconfig for the current AWS caller and verifies:
+
+```bash
+kubectl auth can-i get nodes
+kubectl get nodes
+```
+
 Optionally grant another IAM user or role cluster-admin access:
 
 ```bash
 ./02-eks/post-create.sh student1 us-east-2 student1-admin
 ./02-eks/post-create.sh student1 us-east-2 arn:aws:iam::123456789012:role/trainer-admin
+```
+
+The extra IAM user or role must use its own AWS credentials and run:
+
+```bash
+aws eks update-kubeconfig --name student1 --region us-east-2
+kubectl get nodes
 ```
 
 ## Post-creation checks

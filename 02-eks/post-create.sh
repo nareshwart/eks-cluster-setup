@@ -15,6 +15,9 @@ fi
 CLUSTER_NAME="$1"
 REGION="$2"
 ADMIN_PRINCIPAL="${3:-}"
+CURRENT_CALLER_ARN="$(aws sts get-caller-identity --query Arn --output text)"
+
+echo "Current AWS caller: $CURRENT_CALLER_ARN"
 
 if [ -n "$ADMIN_PRINCIPAL" ]; then
   if [[ "$ADMIN_PRINCIPAL" == arn:aws:iam::* ]]; then
@@ -52,6 +55,7 @@ if [ -n "$ADMIN_PRINCIPAL" ]; then
 fi
 
 aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$REGION"
+kubectl config current-context
 
 aws eks describe-cluster \
   --name "$CLUSTER_NAME" \
@@ -65,6 +69,14 @@ if [ -n "$ADMIN_PRINCIPAL" ]; then
     --region "$REGION" \
     --principal-arn "$ADMIN_PRINCIPAL_ARN" \
     --output table
+
+  cat <<EOF
+
+The admin principal must use its own AWS credentials and run this once before using kubectl:
+  aws eks update-kubeconfig --name $CLUSTER_NAME --region $REGION
+
+EOF
 fi
 
+kubectl auth can-i get nodes
 kubectl get nodes
