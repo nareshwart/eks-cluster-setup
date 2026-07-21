@@ -2,6 +2,13 @@
 set -euo pipefail
 
 REGION="us-east-2"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ "${EUID:-$(id -u)}" -eq 0 ] && [ -n "${SUDO_USER:-}" ]; then
+  echo "Do not run this script with sudo. AWS credentials are usually configured for the normal user, not root."
+  echo "Run: bash $0 <cluster-name> <vpc-id|vpc-name> <kubernetes-version>"
+  exit 1
+fi
 
 if [ $# -lt 3 ]; then
   cat <<EOF
@@ -19,7 +26,7 @@ fi
 CLUSTER_NAME="$1"
 VPC_REF="$2"
 K8S_VERSION="$3"
-OUTPUT_FILE="${4:-02-eks/cluster.generated.yaml}"
+OUTPUT_FILE="${4:-${SCRIPT_DIR}/cluster.generated.yaml}"
 
 if [[ "$VPC_REF" == vpc-* ]]; then
   VPC_ID="$VPC_REF"
@@ -75,7 +82,7 @@ sed \
   -e "s/PUBLIC_SUBNET_1/${PUBLIC_SUBNETS[0]}/g" \
   -e "s/PUBLIC_SUBNET_2/${PUBLIC_SUBNETS[1]}/g" \
   -e "s/PUBLIC_SUBNET_3/${PUBLIC_SUBNETS[2]}/g" \
-  02-eks/cluster.yaml > "$OUTPUT_FILE"
+  "${SCRIPT_DIR}/cluster.yaml" > "$OUTPUT_FILE"
 
 cat <<EOF
 Generated $OUTPUT_FILE
@@ -87,5 +94,5 @@ After review, create the cluster manually:
   eksctl create cluster -f $OUTPUT_FILE
 
 After creation:
-  ./02-eks/post-create.sh $CLUSTER_NAME $REGION
+  ${SCRIPT_DIR}/post-create.sh $CLUSTER_NAME $REGION
 EOF

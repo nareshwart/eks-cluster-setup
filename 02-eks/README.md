@@ -29,6 +29,8 @@ less 02-eks/cluster.generated.yaml
 eksctl create cluster -f 02-eks/cluster.generated.yaml
 ```
 
+If you run the bootstrap script from inside `02-eks`, the generated file is `cluster.generated.yaml` in the current directory.
+
 5. Configure local kubeconfig and OIDC:
 
 ```bash
