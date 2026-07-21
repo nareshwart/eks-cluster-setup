@@ -16,6 +16,15 @@ report_dependencies() {
   echo "Subnets:"
   aws ec2 describe-subnets --region "$REGION" --filters Name=vpc-id,Values="$VPC_ID" --query 'Subnets[].SubnetId' --output table || true
   echo
+  echo "VPC CIDR associations:"
+  aws ec2 describe-vpcs --region "$REGION" --vpc-ids "$VPC_ID" --query 'Vpcs[0].CidrBlockAssociationSet[].{Cidr:CidrBlock,Association:AssociationId,State:CidrBlockState.State,Primary:IsPrimary}' --output table || true
+  echo
+  echo "Internet gateways:"
+  aws ec2 describe-internet-gateways --region "$REGION" --filters Name=attachment.vpc-id,Values="$VPC_ID" --query 'InternetGateways[].{Id:InternetGatewayId,State:Attachments[0].State}' --output table || true
+  echo
+  echo "Route tables:"
+  aws ec2 describe-route-tables --region "$REGION" --filters Name=vpc-id,Values="$VPC_ID" --query 'RouteTables[].{Id:RouteTableId,Main:Associations[0].Main,Associations:length(Associations),Routes:length(Routes)}' --output table || true
+  echo
   echo "Network interfaces:"
   aws ec2 describe-network-interfaces --region "$REGION" --filters Name=vpc-id,Values="$VPC_ID" --query 'NetworkInterfaces[].{Id:NetworkInterfaceId,Status:Status,Description:Description,Attachment:Attachment.InstanceId}' --output table || true
   echo
@@ -28,11 +37,23 @@ report_dependencies() {
   echo "Load balancers:"
   aws elbv2 describe-load-balancers --region "$REGION" --query "LoadBalancers[?VpcId=='${VPC_ID}'].{Name:LoadBalancerName,Arn:LoadBalancerArn,State:State.Code}" --output table || true
   echo
+  echo "Classic load balancers:"
+  aws elb describe-load-balancers --region "$REGION" --query "LoadBalancerDescriptions[?VPCId=='${VPC_ID}'].{Name:LoadBalancerName,DNS:DNSName}" --output table || true
+  echo
   echo "Non-default security groups:"
   aws ec2 describe-security-groups --region "$REGION" --filters Name=vpc-id,Values="$VPC_ID" --query 'SecurityGroups[?GroupName!=`default`].{Id:GroupId,Name:GroupName}' --output table || true
   echo
   echo "Non-default network ACLs:"
   aws ec2 describe-network-acls --region "$REGION" --filters Name=vpc-id,Values="$VPC_ID" --query 'NetworkAcls[?IsDefault==`false`].{Id:NetworkAclId}' --output table || true
+  echo
+  echo "VPC peering connections:"
+  aws ec2 describe-vpc-peering-connections --region "$REGION" --filters Name=requester-vpc-info.vpc-id,Values="$VPC_ID" --query 'VpcPeeringConnections[].{Id:VpcPeeringConnectionId,Status:Status.Code}' --output table || true
+  echo
+  echo "Transit gateway attachments:"
+  aws ec2 describe-transit-gateway-vpc-attachments --region "$REGION" --filters Name=vpc-id,Values="$VPC_ID" --query 'TransitGatewayVpcAttachments[].{Id:TransitGatewayAttachmentId,State:State}' --output table || true
+  echo
+  echo "VPN gateways:"
+  aws ec2 describe-vpn-gateways --region "$REGION" --filters Name=attachment.vpc-id,Values="$VPC_ID" --query 'VpnGateways[].{Id:VpnGatewayId,State:State}' --output table || true
   echo
   echo "Tip: if this was used by EKS, delete the cluster and Kubernetes Services of type LoadBalancer first."
 }
