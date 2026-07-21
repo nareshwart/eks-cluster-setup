@@ -1,0 +1,8 @@
+apiVersion: crd.k8s.amazonaws.com/v1alpha1
+kind: ENIConfig
+metadata:
+  name: AZ_NAME
+spec:
+  subnet: POD_SUBNET_ID
+  securityGroups:
+    - CLUSTER_SECURITY_GROUP_ID
