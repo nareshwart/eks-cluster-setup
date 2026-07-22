@@ -1,13 +1,14 @@
 name: terraform-ci
 
 on:
-  pull_request:
-    paths:
-      - "terraform/**"
-  push:
-    branches: [main]
-    paths:
-      - "terraform/**"
+  workflow_dispatch:
+  # pull_request:
+  #   paths:
+  #     - "terraform/**"
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - "terraform/**"
 
 jobs:
   validate:
