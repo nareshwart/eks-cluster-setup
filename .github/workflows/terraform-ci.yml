@@ -1,0 +1,55 @@
+name: terraform-ci
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/02-clusters
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive ..
+
+      - name: terraform init
+        run: terraform init -backend=false
+
+      - name: terraform validate
+        run: terraform validate
+
+      - name: terraform plan (student01, no credentials required to fail fast on syntax)
+        run: terraform plan -var="student_name=student01" -lock=false
+        continue-on-error: true
+
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform
+
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform
+          quiet: true
+          soft_fail: true
+
+  manual-apply-gate:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: echo "Manual approval required before 'terraform apply' is run by an operator."
