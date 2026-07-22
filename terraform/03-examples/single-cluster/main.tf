@@ -33,6 +33,11 @@ module "cluster" {
   instance_type = "t3.medium"
   node_count    = 3
 
+  # Required - no default, to avoid CIDR collisions if you run multiple
+  # clusters/examples in the same AWS account. Pick a unique range per cluster.
+  vpc_cidr = "10.0.0.0/16"
+  pod_cidr = "100.64.0.0/16"
+
   # Add any other IAM users/roles (e.g. your console role) that need
   # cluster-admin access besides whoever runs `terraform apply`.
   additional_admin_principal_arns = []

@@ -11,13 +11,12 @@ variable "cluster_name" {
 variable "vpc_cidr" {
   description = "Primary VPC CIDR block used for node networking"
   type        = string
-  default     = "10.0.0.0/16"
 }
 
 variable "pod_cidr" {
   description = "Secondary CIDR block for pod networking (custom networking). Empty string disables it."
   type        = string
-  default     = "100.64.0.0/16"
+  default     = ""
 }
 
 variable "az_count" {

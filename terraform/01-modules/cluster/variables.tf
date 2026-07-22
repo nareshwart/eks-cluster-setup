@@ -67,8 +67,8 @@ variable "enable_unmanaged_node_group" {
 }
 
 variable "vpc_cidr" {
-  type    = string
-  default = "10.0.0.0/16"
+  description = "Primary VPC CIDR block used for node networking. Required - no default, to avoid CIDR collisions between clusters."
+  type        = string
 }
 
 variable "enable_custom_pod_networking" {
@@ -78,8 +78,8 @@ variable "enable_custom_pod_networking" {
 }
 
 variable "pod_cidr" {
-  type    = string
-  default = "100.64.0.0/16"
+  description = "Secondary CIDR block for pod networking (custom networking). Required - no default, to avoid CIDR collisions between clusters."
+  type        = string
 }
 
 variable "az_count" {
