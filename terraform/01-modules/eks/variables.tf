@@ -48,6 +48,12 @@ variable "capacity_type" {
   default = "ON_DEMAND"
 }
 
+variable "additional_admin_principal_arns" {
+  description = "Extra IAM principal ARNs (users or roles) to grant cluster-admin access, in addition to the identity running `terraform apply`. Use role ARNs, not assumed-role session ARNs."
+  type        = list(string)
+  default     = []
+}
+
 variable "node_count" {
   type    = number
   default = 3

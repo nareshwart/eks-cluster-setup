@@ -80,6 +80,30 @@ resource "aws_eks_access_policy_association" "caller_identity_admin" {
 }
 
 # ---------------------------------------------------------------------------
+# Grant additional IAM principals (e.g. other admins, console users) access
+# ---------------------------------------------------------------------------
+
+resource "aws_eks_access_entry" "additional_admins" {
+  for_each      = toset(var.additional_admin_principal_arns)
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = each.value
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "additional_admins" {
+  for_each      = toset(var.additional_admin_principal_arns)
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = each.value
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.additional_admins]
+}
+
+# ---------------------------------------------------------------------------
 # Managed Node Group (default)
 # ---------------------------------------------------------------------------
 

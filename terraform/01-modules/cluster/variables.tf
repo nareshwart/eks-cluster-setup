@@ -35,6 +35,12 @@ variable "capacity_type" {
   default = "ON_DEMAND"
 }
 
+variable "additional_admin_principal_arns" {
+  description = "Extra IAM principal ARNs (users or roles) to grant cluster-admin access, in addition to the identity running `terraform apply`."
+  type        = list(string)
+  default     = []
+}
+
 variable "node_count" {
   type    = number
   default = 3
@@ -78,7 +84,7 @@ variable "pod_cidr" {
 
 variable "az_count" {
   type    = number
-  default = 2
+  default = 3
 }
 
 variable "enable_private_subnets" {

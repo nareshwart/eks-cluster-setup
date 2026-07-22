@@ -23,7 +23,7 @@ variable "pod_cidr" {
 variable "az_count" {
   description = "Number of Availability Zones to spread subnets across"
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "enable_private_subnets" {

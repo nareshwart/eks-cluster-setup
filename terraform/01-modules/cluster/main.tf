@@ -45,23 +45,24 @@ module "iam" {
 module "eks" {
   source = "../eks"
 
-  cluster_name                = local.cluster_name
-  kubernetes_version          = var.kubernetes_version
-  cluster_role_arn            = module.iam.cluster_role_arn
-  node_role_arn               = module.iam.node_role_arn
-  node_instance_profile_name  = module.iam.node_instance_profile_name
-  node_subnet_ids             = module.networking.node_subnet_ids
-  cluster_security_group_id   = module.networking.cluster_security_group_id
-  endpoint_private_access     = var.enable_private_subnets
-  enable_cluster_logging      = var.enable_cluster_logging
-  instance_type               = var.instance_type
-  capacity_type               = var.capacity_type
-  node_count                  = var.node_count
-  node_min_size               = var.node_min_size
-  node_max_size               = var.node_max_size
-  enable_managed_node_group   = var.enable_managed_node_group
-  enable_unmanaged_node_group = var.enable_unmanaged_node_group
-  tags                        = local.tags
+  cluster_name                    = local.cluster_name
+  kubernetes_version              = var.kubernetes_version
+  cluster_role_arn                = module.iam.cluster_role_arn
+  node_role_arn                   = module.iam.node_role_arn
+  node_instance_profile_name      = module.iam.node_instance_profile_name
+  node_subnet_ids                 = module.networking.node_subnet_ids
+  cluster_security_group_id       = module.networking.cluster_security_group_id
+  endpoint_private_access         = var.enable_private_subnets
+  enable_cluster_logging          = var.enable_cluster_logging
+  instance_type                   = var.instance_type
+  capacity_type                   = var.capacity_type
+  node_count                      = var.node_count
+  node_min_size                   = var.node_min_size
+  node_max_size                   = var.node_max_size
+  enable_managed_node_group       = var.enable_managed_node_group
+  enable_unmanaged_node_group     = var.enable_unmanaged_node_group
+  additional_admin_principal_arns = var.additional_admin_principal_arns
+  tags                            = local.tags
 }
 
 module "addons" {

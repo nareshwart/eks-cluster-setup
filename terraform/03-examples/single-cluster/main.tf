@@ -32,6 +32,10 @@ module "cluster" {
 
   instance_type = "t3.medium"
   node_count    = 3
+
+  # Add any other IAM users/roles (e.g. your console role) that need
+  # cluster-admin access besides whoever runs `terraform apply`.
+  additional_admin_principal_arns = []
 }
 
 # Kubernetes/Helm providers authenticate against the cluster created by this
