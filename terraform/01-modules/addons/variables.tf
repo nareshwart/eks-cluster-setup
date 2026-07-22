@@ -30,11 +30,6 @@ variable "enable_metrics_server" {
   default = true
 }
 
-variable "metrics_server_chart_version" {
-  type    = string
-  default = "3.12.1"
-}
-
 variable "enable_alb_controller" {
   description = "Optional AWS Load Balancer Controller"
   type        = bool

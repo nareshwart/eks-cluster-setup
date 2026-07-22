@@ -93,16 +93,17 @@ resource "aws_eks_addon" "ebs_csi" {
 }
 
 # ---------------------------------------------------------------------------
-# Metrics server (helm, not an EKS-managed addon)
+# Metrics server (EKS-managed addon)
 # ---------------------------------------------------------------------------
 
-resource "helm_release" "metrics_server" {
-  count      = var.enable_metrics_server ? 1 : 0
-  name       = "metrics-server"
-  repository = "https://kubernetes-sigs.github.io/metrics-server/"
-  chart      = "metrics-server"
-  namespace  = "kube-system"
-  version    = var.metrics_server_chart_version
+resource "aws_eks_addon" "metrics_server" {
+  count                       = var.enable_metrics_server ? 1 : 0
+  cluster_name                = var.cluster_name
+  addon_name                  = "metrics-server"
+  resolve_conflicts_on_update = "OVERWRITE"
+  tags                        = var.tags
+
+  depends_on = [var.managed_node_group_name]
 }
 
 # ---------------------------------------------------------------------------
