@@ -137,23 +137,31 @@ resource "aws_eks_addon" "vpc_cni" {
   ]
 }
 
-resource "kubernetes_manifest" "eniconfig" {
+resource "terraform_data" "apply_eniconfig" {
   for_each = var.enable_custom_pod_networking ? {
     for idx, az in var.azs : az => var.pod_subnet_ids[idx]
   } : {}
 
-  manifest = {
-    apiVersion = "crd.k8s.amazonaws.com/v1alpha1"
-    kind       = "ENIConfig"
-    metadata = {
-      name = each.key
-    }
-    spec = {
-      subnet = each.value
-      securityGroups = [
-        var.cluster_security_group_id
-      ]
-    }
+  input = {
+    subnet          = each.value
+    security_groups = var.cluster_security_group_id
+    cluster_name    = aws_eks_cluster.this.name
+  }
+
+  provisioner "local-exec" {
+    command = <<EOF
+aws eks update-kubeconfig --name ${aws_eks_cluster.this.name} --region us-east-2
+cat <<EKSOF | kubectl apply -f -
+apiVersion: crd.k8s.amazonaws.com/v1alpha1
+kind: ENIConfig
+metadata:
+  name: ${each.key}
+spec:
+  subnet: ${each.value}
+  securityGroups:
+  - ${var.cluster_security_group_id}
+EKSOF
+EOF
   }
 
   depends_on = [
@@ -192,7 +200,7 @@ resource "aws_eks_node_group" "managed" {
   }
 
   depends_on = [
-    kubernetes_manifest.eniconfig
+    terraform_data.apply_eniconfig
   ]
 }
 
@@ -256,6 +264,6 @@ resource "aws_autoscaling_group" "unmanaged" {
 
   depends_on = [
     aws_eks_cluster.this,
-    kubernetes_manifest.eniconfig
+    terraform_data.apply_eniconfig
   ]
 }
