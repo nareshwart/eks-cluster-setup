@@ -52,7 +52,7 @@ module "eks" {
   node_instance_profile_name      = module.iam.node_instance_profile_name
   node_subnet_ids                 = module.networking.node_subnet_ids
   cluster_security_group_id       = module.networking.cluster_security_group_id
-  endpoint_private_access         = var.enable_private_subnets
+  endpoint_private_access         = true
   enable_cluster_logging          = var.enable_cluster_logging
   instance_type                   = var.instance_type
   capacity_type                   = var.capacity_type

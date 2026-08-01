@@ -29,7 +29,7 @@ variable "cluster_security_group_id" {
 
 variable "endpoint_private_access" {
   type    = bool
-  default = false
+  default = true
 }
 
 variable "enable_cluster_logging" {
