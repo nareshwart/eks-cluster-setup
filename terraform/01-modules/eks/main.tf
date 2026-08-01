@@ -13,6 +13,16 @@ terraform {
 
 data "aws_caller_identity" "current" {}
 
+locals {
+  # If the caller is an assumed role (e.g. from an EC2 instance profile or SSO role),
+  # extract the account ID and role name to build a valid IAM Role ARN.
+  # Otherwise, use the caller identity ARN directly.
+  assumed_role_regex = "^arn:aws:sts::(\\d+):assumed-role/(.+)/[^/]+$"
+  is_assumed_role    = can(regex(local.assumed_role_regex, data.aws_caller_identity.current.arn))
+  
+  caller_arn = local.is_assumed_role ? "arn:aws:iam::${regex(local.assumed_role_regex, data.aws_caller_identity.current.arn)[0]}:role/${regex(local.assumed_role_regex, data.aws_caller_identity.current.arn)[1]}" : data.aws_caller_identity.current.arn
+}
+
 # ---------------------------------------------------------------------------
 # EKS Cluster
 # ---------------------------------------------------------------------------
@@ -63,13 +73,13 @@ resource "aws_iam_openid_connect_provider" "this" {
 
 resource "aws_eks_access_entry" "caller_identity" {
   cluster_name  = aws_eks_cluster.this.name
-  principal_arn = data.aws_caller_identity.current.arn
+  principal_arn = local.caller_arn
   type          = "STANDARD"
 }
 
 resource "aws_eks_access_policy_association" "caller_identity_admin" {
   cluster_name  = aws_eks_cluster.this.name
-  principal_arn = data.aws_caller_identity.current.arn
+  principal_arn = local.caller_arn
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
 
   access_scope {
