@@ -12,15 +12,8 @@ terraform {
 }
 
 # ---------------------------------------------------------------------------
-# EKS managed add-ons: VPC CNI, CoreDNS, kube-proxy
+# EKS managed add-ons: CoreDNS, kube-proxy
 # ---------------------------------------------------------------------------
-
-resource "aws_eks_addon" "vpc_cni" {
-  cluster_name                = var.cluster_name
-  addon_name                  = "vpc-cni"
-  resolve_conflicts_on_update = "OVERWRITE"
-  tags                        = var.tags
-}
 
 resource "aws_eks_addon" "coredns" {
   cluster_name                = var.cluster_name

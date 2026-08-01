@@ -30,3 +30,7 @@ output "cluster_security_group_id" {
 output "node_subnet_ids" {
   value = var.enable_private_subnets ? concat(aws_subnet.public[*].id, aws_subnet.private[*].id) : aws_subnet.public[*].id
 }
+
+output "azs" {
+  value = local.azs
+}

@@ -114,6 +114,54 @@ resource "aws_eks_access_policy_association" "additional_admins" {
 }
 
 # ---------------------------------------------------------------------------
+# VPC CNI & Custom Networking (ENIConfig)
+# ---------------------------------------------------------------------------
+
+resource "aws_eks_addon" "vpc_cni" {
+  cluster_name                = aws_eks_cluster.this.name
+  addon_name                  = "vpc-cni"
+  resolve_conflicts_on_update = "OVERWRITE"
+  tags                        = var.tags
+
+  # Only configure if custom pod networking is enabled
+  configuration_values = var.enable_custom_pod_networking ? jsonencode({
+    env = {
+      AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG = "true"
+      ENI_CONFIG_LABEL_DEF               = "topology.kubernetes.io/zone"
+      ENABLE_PREFIX_DELEGATION           = "true"
+    }
+  }) : null
+
+  depends_on = [
+    aws_eks_access_policy_association.caller_identity_admin
+  ]
+}
+
+resource "kubernetes_manifest" "eniconfig" {
+  for_each = var.enable_custom_pod_networking ? {
+    for idx, az in var.azs : az => var.pod_subnet_ids[idx]
+  } : {}
+
+  manifest = {
+    apiVersion = "crd.k8s.amazonaws.com/v1alpha1"
+    kind       = "ENIConfig"
+    metadata = {
+      name = each.key
+    }
+    spec = {
+      subnet = each.value
+      securityGroups = [
+        var.cluster_security_group_id
+      ]
+    }
+  }
+
+  depends_on = [
+    aws_eks_addon.vpc_cni
+  ]
+}
+
+# ---------------------------------------------------------------------------
 # Managed Node Group (default)
 # ---------------------------------------------------------------------------
 
@@ -142,6 +190,10 @@ resource "aws_eks_node_group" "managed" {
   lifecycle {
     ignore_changes = [scaling_config[0].desired_size]
   }
+
+  depends_on = [
+    kubernetes_manifest.eniconfig
+  ]
 }
 
 # ---------------------------------------------------------------------------
@@ -202,5 +254,8 @@ resource "aws_autoscaling_group" "unmanaged" {
     }
   }
 
-  depends_on = [aws_eks_cluster.this]
+  depends_on = [
+    aws_eks_cluster.this,
+    kubernetes_manifest.eniconfig
+  ]
 }

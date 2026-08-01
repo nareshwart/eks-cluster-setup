@@ -84,3 +84,18 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "enable_custom_pod_networking" {
+  type    = bool
+  default = true
+}
+
+variable "azs" {
+  type    = list(string)
+  default = []
+}
+
+variable "pod_subnet_ids" {
+  type    = list(string)
+  default = []
+}

@@ -62,6 +62,9 @@ module "eks" {
   enable_managed_node_group       = var.enable_managed_node_group
   enable_unmanaged_node_group     = var.enable_unmanaged_node_group
   additional_admin_principal_arns = var.additional_admin_principal_arns
+  enable_custom_pod_networking    = var.enable_custom_pod_networking
+  azs                             = module.networking.azs
+  pod_subnet_ids                  = module.networking.pod_subnet_ids
   tags                            = local.tags
 }
 
