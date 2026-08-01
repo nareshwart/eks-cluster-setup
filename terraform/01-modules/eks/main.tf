@@ -173,6 +173,18 @@ EOF
 # Managed Node Group (default)
 # ---------------------------------------------------------------------------
 
+resource "aws_launch_template" "managed" {
+  count       = var.enable_managed_node_group ? 1 : 0
+  name_prefix = "${var.cluster_name}-managed-lt-"
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(var.tags, {
+      Name = var.cluster_name
+    })
+  }
+}
+
 resource "aws_eks_node_group" "managed" {
   count           = var.enable_managed_node_group ? 1 : 0
   cluster_name    = aws_eks_cluster.this.name
@@ -193,8 +205,13 @@ resource "aws_eks_node_group" "managed" {
     max_unavailable = 1
   }
 
+  launch_template {
+    id      = aws_launch_template.managed[0].id
+    version = "$Latest"
+  }
+
   tags = merge(var.tags, {
-    Name = "${var.cluster_name}-node"
+    Name = var.cluster_name
   })
 
   lifecycle {
