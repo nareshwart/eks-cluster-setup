@@ -10,7 +10,7 @@ Usage:
 $0 <region> <cluster-name> <vpc-cidr> <k8s-version>
 
 Example:
-$0 us-east-2 student1 10.10.0.0/16 1.33
+$0 us-east-2 student1 10.10.0.0/16 1.36
 EOF
 exit 1
 fi

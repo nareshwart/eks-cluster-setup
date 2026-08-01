@@ -15,8 +15,8 @@ if [ $# -lt 3 ]; then
 Usage: $0 <cluster-name> <vpc-id|vpc-name> <kubernetes-version>
 
 Example:
-  $0 student1 student1-vpc 1.33
-  $0 student1 vpc-xxxxxxxx 1.33
+  $0 student1 student1-vpc 1.36
+  $0 student1 vpc-xxxxxxxx 1.36
 
 Region is hard-coded to: $REGION
 EOF
@@ -74,7 +74,7 @@ done
 sed \
   -e "s/CLUSTER_NAME/${CLUSTER_NAME}/g" \
   -e "s/us-east-2/${REGION}/g" \
-  -e "s/1.33/${K8S_VERSION}/g" \
+  -e "s/1.36/${K8S_VERSION}/g" \
   -e "s/VPC_ID/${VPC_ID}/g" \
   -e "s/AZ_1/${AZS[0]}/g" \
   -e "s/AZ_2/${AZS[1]}/g" \

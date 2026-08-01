@@ -11,8 +11,8 @@ Generates and creates an EKS cluster with `eksctl`.
 2. Generate an eksctl config:
 
 ```bash
-./02-eks/eks-training-bootstrap.sh student1 student1-vpc 1.33
-./02-eks/eks-training-bootstrap.sh student1 vpc-xxxxxxxx 1.33
+./02-eks/eks-training-bootstrap.sh student1 student1-vpc 1.36
+./02-eks/eks-training-bootstrap.sh student1 vpc-xxxxxxxx 1.36
 ```
 
 The bootstrap script uses `us-east-2` as the fixed region.
