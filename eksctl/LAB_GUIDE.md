@@ -404,7 +404,7 @@ us-east-2c    30s
 
 ### Step 6b — Delete the existing node group
 
-The current `workers` node group must be deleted so fresh nodes can be created to pick up the ENIConfig.
+The current `workers` node group must be deleted so fresh nodes can be created to pick up the ENIConfig. We use the `--disable-eviction` flag to skip eviction logic for daemonsets/system pods, which prevents hangs and speeds up the node termination.
 
 ```bash
 export CLUSTER_NAME=student1
@@ -414,10 +414,11 @@ eksctl delete nodegroup \
   --cluster $CLUSTER_NAME \
   --region  $REGION \
   --name    workers \
+  --disable-eviction \
   --wait
 ```
 
-⏱️ **This takes ~5 minutes.** eksctl drains and terminates all nodes, then deletes the CloudFormation stack for the node group.
+⏱️ **This takes ~5 minutes.** eksctl terminates all nodes directly and deletes the CloudFormation stack for the node group.
 
 **Verify the node group is gone:**
 ```bash
