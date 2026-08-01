@@ -36,8 +36,8 @@ graph TD
 
     %% Flow connections
     Root -->|Calls| Cluster
-    Cluster -->|1st (Parallel)| Net
-    Cluster -->|1st (Parallel)| IAM
+    Cluster -->|Parallel| Net
+    Cluster -->|Parallel| IAM
     
     Net -->|Passes: subnet IDs & SGs| EKS_Ctrl
     IAM -->|Passes: role_arns & profile_names| EKS_Ctrl
