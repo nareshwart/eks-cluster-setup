@@ -3,9 +3,9 @@
 # running even if your SSH session to the jump box drops mid-way.
 #
 # Usage:
-#   ./destroy-one-resilient.sh dev01            # start destroy, detached
-#   ./destroy-one-resilient.sh dev01 --attach   # reattach to watch progress
-#   ./destroy-one-resilient.sh dev01 --status   # check if still running
+#   ./destroy-one-resilient.sh student1            # start destroy, detached
+#   ./destroy-one-resilient.sh student1 --attach   # reattach to watch progress
+#   ./destroy-one-resilient.sh student1 --status   # check if still running
 set -euo pipefail
 
 CLUSTER="${1:?Usage: destroy-one-resilient.sh <cluster_name> [--attach|--status]}"

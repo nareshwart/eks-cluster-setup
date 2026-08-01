@@ -28,8 +28,8 @@ terraform/
 ## Design
 
 - Region: `us-east-2`
-- Kubernetes: latest supported EKS version (default `1.31`, override per cluster)
-- Node instance type: `t3.medium`, 3 worker nodes (defaults, overridable)
+- Kubernetes: latest supported EKS version (default `1.36`, override per cluster)
+- Node instance type: `t3.small`, min 2 to max 3 worker nodes (defaults, overridable)
 - Capacity: On-Demand, Managed Node Group by default; optional unmanaged (self-managed) node group
 - VPC: primary CIDR for nodes + secondary CIDR for pods (custom networking), NAT Gateway optional
 - State isolation: local backend, **one Terraform workspace per cluster** under `02-clusters/`
@@ -44,19 +44,19 @@ cd terraform/02-clusters
 terraform init
 
 # Create one cluster
-../04-automation/create-one.sh dev01
+../04-automation/create-one.sh student1
 
 # Create all clusters defined in clusters.auto.tfvars.json
 ../04-automation/create-all.sh
 
 # Get kubeconfig
-../04-automation/generate-kubeconfig.sh dev01
+../04-automation/generate-kubeconfig.sh student1
 
 # Health check
-../04-automation/health-check.sh dev01
+../04-automation/health-check.sh student1
 
 # Destroy one / all
-../04-automation/destroy-one.sh dev01
+../04-automation/destroy-one.sh student1
 ../04-automation/destroy-all.sh
 ```
 

@@ -68,11 +68,11 @@ variable "default_cluster_config" {
     enable_alb_controller        = bool
   })
   default = {
-    kubernetes_version           = "1.35"
-    instance_type                = "t3.medium"
+    kubernetes_version           = "1.36"
+    instance_type                = "t3.small"
     capacity_type                = "ON_DEMAND"
     node_count                   = 2
-    node_min_size                = 1
+    node_min_size                = 2
     node_max_size                = 3
     enable_managed_node_group    = true
     enable_unmanaged_node_group  = false

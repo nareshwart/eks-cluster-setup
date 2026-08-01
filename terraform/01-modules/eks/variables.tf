@@ -4,7 +4,7 @@ variable "cluster_name" {
 
 variable "kubernetes_version" {
   type    = string
-  default = "1.31"
+  default = "1.36"
 }
 
 variable "cluster_role_arn" {
@@ -40,7 +40,7 @@ variable "enable_cluster_logging" {
 
 variable "instance_type" {
   type    = string
-  default = "t3.medium"
+  default = "t3.small"
 }
 
 variable "capacity_type" {
@@ -56,17 +56,17 @@ variable "additional_admin_principal_arns" {
 
 variable "node_count" {
   type    = number
-  default = 3
+  default = 2
 }
 
 variable "node_min_size" {
   type    = number
-  default = 1
+  default = 2
 }
 
 variable "node_max_size" {
   type    = number
-  default = 5
+  default = 3
 }
 
 variable "enable_managed_node_group" {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generate a kubeconfig for a cluster.
-# Usage: ./generate-kubeconfig.sh dev01 [region]
+# Usage: ./generate-kubeconfig.sh student1 [region]
 set -euo pipefail
 
 CLUSTER="${1:?Usage: generate-kubeconfig.sh <cluster_name> [region]}"

@@ -26,12 +26,12 @@ provider "aws" {
 module "cluster" {
   source = "../../01-modules/cluster"
 
-  cluster_name = "dev01"
+  cluster_name = "student1"
   environment  = "dev"
   owner        = "platform-team"
 
-  instance_type = "t3.medium"
-  node_count    = 3
+  instance_type = "t3.small"
+  node_count    = 2
 
   # Required - no default, to avoid CIDR collisions if you run multiple
   # clusters/examples in the same AWS account. Pick a unique range per cluster.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Health-check a cluster: nodes Ready, core pods Running.
-# Usage: ./health-check.sh dev01 [region]
+# Usage: ./health-check.sh student1 [region]
 set -euo pipefail
 
 CLUSTER="${1:?Usage: health-check.sh <cluster_name> [region]}"

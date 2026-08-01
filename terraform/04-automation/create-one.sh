@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Create a single EKS cluster.
-# Usage: ./create-one.sh dev01
+# Usage: ./create-one.sh student1
 set -euo pipefail
 
 CLUSTER="${1:?Usage: create-one.sh <cluster_name>}"

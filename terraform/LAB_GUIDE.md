@@ -1,7 +1,7 @@
 # EKS Cluster Platform using Terraform — Lab Guide
 
 > **Region**: All resources in this lab are provisioned in `us-east-2` (Ohio).  
-> **Workspace Model**: We use **Terraform Workspaces** under the `02-clusters/` directory to manage multiple EKS clusters cleanly. This isolates state files and resource namespaces without needing duplicate code.  
+> **Model**: We use the single-cluster example under the `03-examples/single-cluster/` directory. This is the simplest way to provision a single EKS cluster using reusable modules.
 > **Repo location**: The repo is cloned to `$HOME/eks-cluster-setup`. Each step below starts with the exact `cd` command you need.
 
 ---
@@ -10,13 +10,13 @@
 
 ```
 Step 0 → Setup Prerequisites & AWS Access
-Step 1 → Explore Terraform Structures & Configuration
-Step 2 → Initialize Terraform & Workspaces
-Step 3 → Apply and Provision EKS Cluster
-Step 4 → Generate Kubeconfig & Verify Access
-Step 5 → Run Health & Deployment Checks
+Step 1 → Explore Example Structure & Config
+Step 2 → Customize the Cluster Configuration
+Step 3 → Initialize & Provision EKS Cluster
+Step 4 → Configure Kubeconfig & Verify Access
+Step 5 → Verify Custom Pod Networking
 Step 6 → Deploy a Sample App (Nginx + ALB Ingress)
-Step 7 → Perform Safe Cleanup & Destroy
+Step 7 → Perform Cleanup & Destroy
 ```
 
 ---
@@ -66,114 +66,91 @@ Choose the credentials option that applies to your setup:
 
 ## Step 1 — Explore Configurations
 
-Before provisioning, navigate to the clusters configuration directory:
+Before provisioning, navigate to the single-cluster example directory:
 
 ```bash
-cd $HOME/eks-cluster-setup/terraform/02-clusters
+cd $HOME/eks-cluster-setup/terraform/03-examples/single-cluster
 ```
 
-Open `clusters.auto.tfvars.json` to inspect the available workspaces:
+Open `main.tf` to inspect the configuration:
 
-```json
-{
-  "clusters": {
-    "dev01": {
-      "kubernetes_version": "1.31",
-      "instance_type": "t3.medium",
-      "capacity_type": "ON_DEMAND",
-      "node_count": 3,
-      "node_min_size": 1,
-      "node_max_size": 5,
-      "enable_managed_node_group": true,
-      "enable_unmanaged_node_group": false,
-      "vpc_cidr": "10.0.0.0/16",
-      "enable_custom_pod_networking": true,
-      "pod_cidr": "100.64.0.0/16",
-      "enable_private_subnets": false,
-      "enable_nat_gateway": false,
-      "enable_cluster_logging": false,
-      "enable_ebs_csi": true,
-      "enable_metrics_server": true,
-      "enable_alb_controller": false
-    }
-  }
-}
-```
-
-> [!NOTE]
-> Since this is a training environment running 8h/day, `enable_private_subnets` and `enable_nat_gateway` are set to `false`. This launches nodes directly in public subnets with public IPs to save NAT Gateway costs (~$32+/month).
+*   **Region**: The AWS provider defaults to `us-east-2`.
+*   **Module wiring**: It references the shared EKS platform module (`../../01-modules/cluster`).
+*   **Kubernetes version**: Defaults to `1.36` (controlled by base module variable defaults).
+*   **Instance type**: Defaults to `t3.small` with a node count of `2` (min 2, max 3).
+*   **Network config**: Sets up nodes directly in public subnets with public IPs (to save NAT Gateway costs in training/lab setups). It configures VPC custom networking with a secondary CIDR for pods.
 
 ---
 
-## Step 2 — Initialize and Set Up Workspaces
+## Step 2 — Customize the Configuration
 
-Navigate to the workspace deployment directory:
+Before running any Terraform commands, edit `main.tf` to customize it with your assigned **student name** and a **unique VPC CIDR block** to avoid clashes in shared AWS accounts.
 
 ```bash
-cd $HOME/eks-cluster-setup/terraform/02-clusters
+cd $HOME/eks-cluster-setup/terraform/03-examples/single-cluster
 ```
 
-### Initialize Terraform providers and backend
+Edit `main.tf` (e.g. using `nano main.tf` or `vi main.tf`) and update the `module "cluster"` block:
+
+```hcl
+module "cluster" {
+  source = "../../01-modules/cluster"
+
+  cluster_name = "student1"             # <-- Change to your assigned student name
+  environment  = "dev"
+  owner        = "platform-team"
+
+  instance_type = "t3.small"
+  node_count    = 2
+
+  # Pick a unique CIDR range per student to prevent collisions
+  vpc_cidr = "10.50.0.0/16"             # <-- E.g., student1: 10.50.0.0/16, student2: 10.51.0.0/16
+  pod_cidr = "100.64.0.0/16"            # <-- E.g., student1: 100.64.0.0/16, student2: 100.65.0.0/16
+
+  additional_admin_principal_arns = []
+}
+```
+
+Save the file and exit.
+
+---
+
+## Step 3 — Initialize and Apply (Provision EKS)
+
+Ensure you are in the single-cluster example directory:
+
+```bash
+cd $HOME/eks-cluster-setup/terraform/03-examples/single-cluster
+```
+
+### Initialize Terraform providers
 ```bash
 terraform init
 ```
 
-### Create and switch to a workspace
-We use the cluster name as the workspace name. For example, to set up `dev01`:
-
+### Preview the changes (Optional)
 ```bash
-# Check existing workspaces
-terraform workspace list
-
-# Create a new workspace named dev01
-terraform workspace new dev01
-
-# Select the workspace (if it already exists)
-terraform workspace select dev01
+terraform plan
 ```
+
+### Provision the EKS Cluster
+```bash
+terraform apply -auto-approve
+```
+
+⏱️ **This takes 15–20 minutes.** Terraform will deploy the VPC, IAM roles, EKS control plane, node groups, and cluster add-ons.
 
 ---
 
-## Step 3 — Apply and Provision the Cluster
+## Step 4 — Configure Kubeconfig & Verify Access
 
-Ensure you are in the workspace directory:
-
-```bash
-cd $HOME/eks-cluster-setup/terraform/02-clusters
-```
-
-We will use the automation wrapper scripts to provision our cluster. The wrapper script handles workspace selecting and triggers the apply cleanly.
+After the apply successfully completes, generate a local kubeconfig file so `kubectl` can communicate with your new cluster.
 
 ```bash
-# Run the create-one script with your workspace name (e.g., dev01)
-../04-automation/create-one.sh dev01
-```
+cd $HOME/eks-cluster-setup/terraform/03-examples/single-cluster
 
-> **Alternative (Vanilla Terraform)**:
-> If you prefer not to use the wrapper, you can run:
-> ```bash
-> terraform apply -var="cluster_name=dev01"
-> ```
-
-⏱️ **This takes 15–20 minutes.** Terraform will deploy VPC subnets, IAM Roles, EKS Control Plane, Node Groups, and Kubernetes add-ons.
-
----
-
-## Step 4 — Generate Kubeconfig & Verify Access
-
-After the deployment successfully completes, we need to generate a kubeconfig file to let `kubectl` authenticate with the new cluster.
-
-```bash
-cd $HOME/eks-cluster-setup/terraform/02-clusters
-
-# Generate the workspace-specific kubeconfig
-../04-automation/generate-kubeconfig.sh dev01
-```
-
-Point your environment to the generated kubeconfig file:
-
-```bash
-export KUBECONFIG=$(pwd)/kubeconfig-dev01
+# Update your kubeconfig (replace student1 with your cluster_name)
+aws eks update-kubeconfig --name eks-student1-cluster --region us-east-2
 ```
 
 Verify connection:
@@ -184,26 +161,15 @@ kubectl get nodes
 **Expected output:**
 ```
 NAME                                          STATUS   ROLES    AGE   VERSION
-ip-10-0-1-xxx.us-east-2.compute.internal     Ready    <none>   2m    v1.31.x
-ip-10-0-2-xxx.us-east-2.compute.internal     Ready    <none>   2m    v1.31.x
+ip-10-50-1-xxx.us-east-2.compute.internal    Ready    <none>   2m    v1.36.x
+ip-10-50-2-xxx.us-east-2.compute.internal    Ready    <none>   2m    v1.36.x
 ```
 
 ---
 
-## Step 5 — Run Cluster Health Checks
+## Step 5 — Verify Custom Pod Networking
 
-Verify all system resources are healthy.
-
-```bash
-cd $HOME/eks-cluster-setup/terraform/02-clusters
-
-# Run the health check wrapper
-../04-automation/health-check.sh dev01
-```
-
-### Step 5a — Verify custom pod networking
-
-The terraform EKS module installs and configures the VPC CNI with custom networking enabled by default (`enable_custom_pod_networking: true`).
+By default, the platform custom networking places pods in the secondary CIDR (`100.64.x.x`) to leave your node subnets free.
 
 **Verify ENIConfigs are present:**
 ```bash
@@ -211,7 +177,7 @@ kubectl get eniconfig
 ```
 
 **Test pod IP allocation:**
-Spin up a test pod and verify it receives a secondary CIDR IP (`100.64.x.x`) instead of a primary node subnet IP (`10.0.x.x`):
+Spin up a test pod and verify it receives a secondary CIDR IP:
 
 ```bash
 # Run test pod
@@ -224,7 +190,7 @@ kubectl get pod netcheck -o wide
 
 Expected output:
 *   **Pod IP**: Should fall inside the `100.64.x.x` range.
-*   **Node IP**: Should remain inside the `10.0.x.x` range.
+*   **Node IP**: Should remain inside the `10.50.x.x` range.
 
 ```bash
 # Clean up test pod
@@ -235,19 +201,14 @@ kubectl delete pod netcheck
 
 ## Step 6 — Deploy a Sample Application
 
-Let's deploy a service and expose it. Since the Terraform setup installs the AWS Load Balancer Controller if enabled, we will expose our app via an Application Load Balancer (ALB).
-
-Ensure you are using the correct kubeconfig:
-```bash
-export KUBECONFIG=$HOME/eks-cluster-setup/terraform/02-clusters/kubeconfig-dev01
-```
+Let's deploy a service and expose it. Since the platform module installs the AWS Load Balancer Controller, we can expose our app via an Application Load Balancer (ALB).
 
 Navigate to the sample application directory:
 ```bash
 cd $HOME/eks-cluster-setup/eksctl/05-applications
 ```
 
-### Apply Deployment & ClusterIP Service
+### Apply Deployment & Service
 ```bash
 kubectl apply -f nginx.yaml
 ```
@@ -271,11 +232,8 @@ Once the `ADDRESS` is shown (e.g., `k8s-default-nginx-xxx.us-east-2.elb.amazonaw
 > [!WARNING]
 > Always delete any Kubernetes `Ingress` resources before running Terraform destroy. Otherwise, the Load Balancer Controller will leave orphan ALBs/Target Groups behind, which will block Terraform from deleting the VPC.
 
+### 1. Delete Ingress resource first
 ```bash
-# 1. Ensure you are using the correct kubeconfig
-export KUBECONFIG=$HOME/eks-cluster-setup/terraform/02-clusters/kubeconfig-dev01
-
-# 2. Delete the ingress resource
 cd $HOME/eks-cluster-setup/eksctl/05-applications
 kubectl delete -f ingress.yaml
 
@@ -283,35 +241,13 @@ kubectl delete -f ingress.yaml
 kubectl get ingress nginx -w
 ```
 
-### Option A — TMUX Detached Destroy (Resilient)
-
-Terraform destroys can take up to 15 minutes. If your SSH connection drops, a running destroy could terminate midway, creating state problems. We recommend running the resilient script which wraps the destroy in a `tmux` or `nohup` session:
+### 2. Destroy EKS Cluster with Terraform
 
 ```bash
-cd $HOME/eks-cluster-setup/terraform/02-clusters
+cd $HOME/eks-cluster-setup/terraform/03-examples/single-cluster
 
-# Start the detached destroy session
-../04-automation/destroy-one-resilient.sh dev01
-
-# Monitor the session status
-../04-automation/destroy-one-resilient.sh dev01 --status
-
-# Attach to the tmux session to watch progress
-../04-automation/destroy-one-resilient.sh dev01 --attach
+# Destroy the EKS Cluster and all its AWS infrastructure
+terraform destroy -auto-approve
 ```
 
-### Option B — Standard Destroy
-
-If you have a stable connection and want to run it inline:
-
-```bash
-cd $HOME/eks-cluster-setup/terraform/02-clusters
-
-# Run the standard destroy wrapper
-../04-automation/destroy-one.sh dev01
-```
-
-Once complete, verify that the workspace state has been removed:
-```bash
-terraform workspace list
-```
+⏱️ **This takes ~15 minutes.** Once finished, all resources created by Terraform in this lab will be deleted.

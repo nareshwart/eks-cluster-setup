@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Destroy a single EKS cluster.
-# Usage: ./destroy-one.sh dev01
+# Usage: ./destroy-one.sh student1
 set -euo pipefail
 
 CLUSTER="${1:?Usage: destroy-one.sh <cluster_name>}"

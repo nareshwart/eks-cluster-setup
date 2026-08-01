@@ -1,5 +1,5 @@
 variable "cluster_name" {
-  description = "Unique cluster identifier, e.g. dev01"
+  description = "Unique cluster identifier, e.g. student1"
   type        = string
 }
 
@@ -22,12 +22,12 @@ variable "extra_tags" {
 
 variable "kubernetes_version" {
   type    = string
-  default = "1.35"
+  default = "1.36"
 }
 
 variable "instance_type" {
   type    = string
-  default = "t3.medium"
+  default = "t3.small"
 }
 
 variable "capacity_type" {
@@ -43,12 +43,12 @@ variable "additional_admin_principal_arns" {
 
 variable "node_count" {
   type    = number
-  default = 3
+  default = 2
 }
 
 variable "node_min_size" {
   type    = number
-  default = 1
+  default = 2
 }
 
 variable "node_max_size" {
