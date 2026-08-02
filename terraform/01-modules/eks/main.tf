@@ -123,14 +123,21 @@ resource "aws_eks_addon" "vpc_cni" {
   resolve_conflicts_on_update = "OVERWRITE"
   tags                        = var.tags
 
-  # Only configure if custom pod networking is enabled
-  configuration_values = var.enable_custom_pod_networking ? jsonencode({
-    env = {
-      AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG = "true"
-      ENI_CONFIG_LABEL_DEF               = "topology.kubernetes.io/zone"
-      ENABLE_PREFIX_DELEGATION           = "true"
-    }
-  }) : null
+  # Configure VPC CNI with native Network Policies and custom networking if enabled
+  configuration_values = jsonencode(
+    merge(
+      {
+        enableNetworkPolicy = "true"
+      },
+      var.enable_custom_pod_networking ? {
+        env = {
+          AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG = "true"
+          ENI_CONFIG_LABEL_DEF               = "topology.kubernetes.io/zone"
+          ENABLE_PREFIX_DELEGATION           = "true"
+        }
+      } : {}
+    )
+  )
 
   depends_on = [
     aws_eks_access_policy_association.caller_identity_admin

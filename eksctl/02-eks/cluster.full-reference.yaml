@@ -177,6 +177,7 @@ addons:
     version: latest
     resolveConflicts: overwrite
     configurationValues: |-
+      enableNetworkPolicy: "true"
       env:
         ENABLE_PREFIX_DELEGATION: "true"
         WARM_PREFIX_TARGET: "1"

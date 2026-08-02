@@ -103,6 +103,8 @@ managedNodeGroups:
 
 addons:
 - name: vpc-cni
+  configurationValues: |-
+    enableNetworkPolicy: "true"
 - name: coredns
 - name: kube-proxy
 - name: eks-pod-identity-agent

@@ -56,6 +56,8 @@ addonsConfig:
 addons:
   - name: vpc-cni
     version: latest
+    configurationValues: |-
+      enableNetworkPolicy: "true"
   - name: coredns
     version: latest
   - name: kube-proxy
