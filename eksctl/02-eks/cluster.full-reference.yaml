@@ -240,6 +240,8 @@ managedNodeGroups:
     tags:
       Project: EKS-Training
       NodeGroup: managed-workers
+      k8s.io/cluster-autoscaler/enabled: "true"
+      k8s.io/cluster-autoscaler/CLUSTER_NAME: "owned"
     securityGroups:
       attachIDs:
         - sg-22222222222222222

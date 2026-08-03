@@ -100,6 +100,11 @@ managedNodeGroups:
   desiredCapacity: 2
   minSize: 2
   maxSize: 3
+  tags:
+    Project: EKS-Training
+    Cluster: \${CLUSTER}
+    k8s.io/cluster-autoscaler/enabled: "true"
+    k8s.io/cluster-autoscaler/\${CLUSTER}: "owned"
 
 addons:
 - name: vpc-cni
