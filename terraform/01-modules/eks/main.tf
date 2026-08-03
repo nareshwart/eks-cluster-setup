@@ -187,7 +187,9 @@ resource "aws_launch_template" "managed" {
   tag_specifications {
     resource_type = "instance"
     tags = merge(var.tags, {
-      Name = var.cluster_name
+      Name                                            = var.cluster_name
+      "k8s.io/cluster-autoscaler/enabled"            = "true"
+      "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
     })
   }
 }
@@ -218,7 +220,9 @@ resource "aws_eks_node_group" "managed" {
   }
 
   tags = merge(var.tags, {
-    Name = var.cluster_name
+    Name                                            = var.cluster_name
+    "k8s.io/cluster-autoscaler/enabled"            = "true"
+    "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
   })
 
   lifecycle {
