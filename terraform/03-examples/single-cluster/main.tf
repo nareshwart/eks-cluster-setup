@@ -41,6 +41,9 @@ module "cluster" {
   # Add any other IAM users/roles (e.g. your console role) that need
   # cluster-admin access besides whoever runs `terraform apply`.
   additional_admin_principal_arns = []
+
+  # Enable SSH to worker nodes using this EC2 key pair
+  ssh_key_name = "ld92-use2"
 }
 
 # Kubernetes/Helm providers authenticate against the cluster created by this

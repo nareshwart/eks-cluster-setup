@@ -66,6 +66,8 @@ module "eks" {
   azs                             = module.networking.azs
   pod_subnet_ids                  = module.networking.pod_subnet_ids
   tags                            = local.tags
+  ssh_key_name                    = var.ssh_key_name
+  enable_nodeport_access          = var.enable_nodeport_access
 }
 
 module "addons" {

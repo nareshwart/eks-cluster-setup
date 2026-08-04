@@ -87,3 +87,15 @@ variable "default_cluster_config" {
     enable_alb_controller        = false
   }
 }
+
+variable "ssh_key_name" {
+  description = "Name of the EC2 Key Pair to enable SSH access to worker nodes"
+  type        = string
+  default     = "ld92-use2"
+}
+
+variable "enable_nodeport_access" {
+  description = "Enable inbound access on NodePort range (30000-32767) from anywhere"
+  type        = bool
+  default     = true
+}

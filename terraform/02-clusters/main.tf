@@ -40,4 +40,7 @@ module "cluster" {
   enable_ebs_csi         = local.cluster_config.enable_ebs_csi
   enable_metrics_server  = local.cluster_config.enable_metrics_server
   enable_alb_controller  = local.cluster_config.enable_alb_controller
+
+  ssh_key_name           = var.ssh_key_name
+  enable_nodeport_access = var.enable_nodeport_access
 }

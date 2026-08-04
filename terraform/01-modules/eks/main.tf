@@ -183,6 +183,7 @@ EOF
 resource "aws_launch_template" "managed" {
   count       = var.enable_managed_node_group ? 1 : 0
   name_prefix = "${var.cluster_name}-managed-lt-"
+  key_name    = var.ssh_key_name != "" ? var.ssh_key_name : null
 
   tag_specifications {
     resource_type = "instance"
@@ -248,6 +249,7 @@ resource "aws_launch_template" "unmanaged" {
   name_prefix   = "${var.cluster_name}-unmanaged-"
   image_id      = data.aws_ssm_parameter.eks_ami[0].value
   instance_type = var.instance_type
+  key_name      = var.ssh_key_name != "" ? var.ssh_key_name : null
 
   iam_instance_profile {
     name = var.node_instance_profile_name
@@ -296,4 +298,44 @@ resource "aws_autoscaling_group" "unmanaged" {
     aws_eks_cluster.this,
     terraform_data.apply_eniconfig
   ]
+}
+
+resource "aws_security_group_rule" "node_ssh" {
+  count             = var.ssh_key_name != "" ? 1 : 0
+  type              = "ingress"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
+}
+
+resource "aws_security_group_rule" "unmanaged_node_ssh" {
+  count             = var.ssh_key_name != "" && var.enable_unmanaged_node_group ? 1 : 0
+  type              = "ingress"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = var.cluster_security_group_id
+}
+
+resource "aws_security_group_rule" "nodeport_ingress" {
+  count             = var.enable_nodeport_access ? 1 : 0
+  type              = "ingress"
+  from_port         = 30000
+  to_port           = 32767
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
+}
+
+resource "aws_security_group_rule" "unmanaged_nodeport_ingress" {
+  count             = var.enable_nodeport_access && var.enable_unmanaged_node_group ? 1 : 0
+  type              = "ingress"
+  from_port         = 30000
+  to_port           = 32767
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = var.cluster_security_group_id
 }
