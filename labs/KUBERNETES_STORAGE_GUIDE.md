@@ -67,10 +67,12 @@ spec:
 ## 2. Node-Bound Storage: `hostPath`
 
 A `hostPath` volume mounts a specific file or directory from the host node's filesystem directly into your Pod. 
-*   **WARNING**: If your pod gets rescheduled to a different worker node, it will connect to a new empty directory on the new node, losing access to the previous node's files.
+*   **WARNING**: If your pod gets rescheduled to a different worker node, it will connect to a new directory on the new node, losing access to the previous node's data.
 *   **Security Risk**: Pods running with `hostPath` can read or modify sensitive host OS configurations, posing a significant container breakout risk.
 
-### Hands-on Example: Node Logger (DaemonSets)
+### 2a. Direct Mount Example (Log Collectors)
+For system daemons like FluentBit, you often mount the host path directly within the pod definition:
+
 ```yaml
 apiVersion: v1
 kind: Pod
@@ -91,6 +93,72 @@ spec:
       path: /var/log # Location on the physical EC2 worker node
       type: Directory
 ```
+
+---
+
+### 2b. Static Provisioning Example (PV & PVC with hostPath)
+To teach the concept of **PersistentVolumes (PV)** and **PersistentVolumeClaims (PVC)** before introducing dynamic cloud storage, we can configure them manually using `hostPath`. 
+
+In this flow, the administrator **manually creates the PV** to declare the physical storage, and the developer requests a subset of it using a PVC.
+
+#### 1. Define the Static HostPath PV (`static-hostpath-pv.yaml`)
+Create a file named `static-hostpath-pv.yaml` to declare the host directory as a cluster resource:
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: static-hostpath-pv
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain # Retains host files when PVC is deleted
+  storageClassName: manual-hostpath # Custom class name to link PV and PVC manually
+  hostPath:
+    path: /mnt/data/shared # Directory on the host node
+```
+
+#### 2. Define the Claim (`static-hostpath-pvc.yaml`)
+Create a file named `static-hostpath-pvc.yaml` where the developer claims the manually created resource:
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: static-hostpath-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi # Must be <= the PV capacity
+  storageClassName: manual-hostpath # Must match the PV's storageClassName
+```
+
+#### 3. Deploy the Pod (`static-hostpath-pod.yaml`)
+Create a file named `static-hostpath-pod.yaml` to mount the claimed static volume:
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: static-hostpath-app
+spec:
+  containers:
+  - name: web
+    image: nginx
+    volumeMounts:
+    - name: hostpath-vol
+      mountPath: /usr/share/nginx/html
+  volumes:
+  - name: hostpath-vol
+    persistentVolumeClaim:
+      claimName: static-hostpath-pvc
+```
+
+> **The Static Bottleneck**: This manual setup works, but it does not scale. If 100 developers need storage, a cluster admin has to manually run `PersistentVolume` manifests for each one. To solve this, we use **Dynamic Network Storage**.
+
+---
 
 ---
 
