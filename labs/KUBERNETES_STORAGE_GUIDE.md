@@ -1,4 +1,4 @@
-# Architectural Guide: Kubernetes Storage Abstractions
+# Kubernetes Storage Abstractions
 
 This document provides a conceptual and hands-on guide to Kubernetes storage abstractions. It covers the difference between ephemeral, host-bound, and persistent networked storage using `emptyDir`, `hostPath`, `PersistentVolume` (PV), `PersistentVolumeClaim` (PVC), and `StorageClass` (SC).
 
