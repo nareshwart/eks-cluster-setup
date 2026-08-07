@@ -1,4 +1,4 @@
-# Kubernetes & Containers: Introductory MCQ Assessment
+# Kubernetes & Containers: 
 
 This assessment contains 25 multiple-choice questions designed to evaluate basic, entry-level knowledge of Docker containers, Kubernetes architecture, core workloads, EKS services, storage, and networking.
 
