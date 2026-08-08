@@ -61,7 +61,9 @@ You can configure probes using one of four check types:
 ## 🛠️ Hands-on Lab Exercise
 
 ### Step 1: Deploy a Pod with Health Checks
-Create a file named `probes-demo.yaml` containing a busybox server that exposes endpoints simulating startup, readiness, and liveness states.
+Create a file named `probes-demo.yaml` containing a simple HTTP server that exposes endpoints simulating startup, readiness, and liveness states.
+
+> **Note**: Avoid relying on `busybox`'s `httpd` applet or `alpine`'s bundled busybox for this — applet availability varies by build/tag, and if the server process fails to start, the container itself keeps running (because it's backgrounded with `&`) while the probes just fail forever, leaving the pod stuck at `0/1` with repeated restarts. To eliminate that risk entirely, this lab uses Python's built-in `http.server` module (`python:3.12-alpine`), which has no external dependencies and is guaranteed to be present in the image.
 
 ```yaml
 apiVersion: apps/v1
@@ -77,13 +79,13 @@ spec:
       app: probes-demo
   template:
     metadata:
-      matchLabels:
+      labels:
         app: probes-demo
     spec:
       containers:
       - name: web-server
-        image: alpine:latest
-        # Exposes a simple HTTP server on port 8080.
+        image: python:3.12-alpine
+        # Exposes a simple HTTP server on port 8080 via Python's stdlib http.server.
         # It takes 15s to become ready, and exposes /healthz and /ready
         command:
         - sh
@@ -92,8 +94,9 @@ spec:
           mkdir -p /tmp/www
           echo "Starting..." > /tmp/www/healthz
           echo "Initial status" > /tmp/www/ready
-          # Start HTTP server
-          httpd -h /tmp/www -p 8080 -f &
+          # Start HTTP server, serving /tmp/www directly (avoids relying on
+          # shell cd/backgrounding order — --directory is explicit and unambiguous)
+          python3 -m http.server 8080 --directory /tmp/www &
           # Simulate 15s boot time
           sleep 15
           echo "App Started!" > /tmp/www/healthz
@@ -126,9 +129,20 @@ spec:
             port: 8080
           periodSeconds: 5
           initialDelaySeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: probes-demo
+spec:
+  selector:
+    app: probes-demo
+  ports:
+  - port: 80
+    targetPort: 8080
 ```
 
-Apply the deployment:
+Apply the deployment and service:
 ```bash
 kubectl apply -f probes-demo.yaml
 ```
@@ -156,12 +170,12 @@ Let's simulate a database connection outage by deleting the `/tmp/www/ready` fil
    ```bash
    kubectl exec -it <pod-name> -- rm /tmp/www/ready
    ```
-3. Watch the pod list status again:
+3. Watch the pod list status again (allow ~15 seconds — the default `failureThreshold: 3` at `periodSeconds: 5` means it takes 3 consecutive failed checks before the status flips):
    ```bash
-   kubectl get pods -l app=probes-demo
+   kubectl get pods -l app=probes-demo -w
    ```
    *   **Result**: The target pod will switch from `1/1` to **`0/1`**. The container is **not restarted**, but it is no longer ready to take traffic.
-4. Check the service endpoints (if you had a service pointing to it):
+4. Check the service endpoints (the `probes-demo` Service created alongside the Deployment):
    ```bash
    kubectl describe endpoints probes-demo
    ```
@@ -180,7 +194,7 @@ Now let's simulate a process crash/freeze by deleting the liveness file `/tmp/ww
    ```bash
    kubectl get pods -l app=probes-demo -w
    ```
-   *   **Result**: Within 5 seconds (our `periodSeconds`), the `livenessProbe` fails. Kubelet immediately restarts the container.
+   *   **Result**: The `livenessProbe` must fail **3 consecutive times** (the default `failureThreshold`) at a 5-second `periodSeconds`, so the restart happens roughly 10-15 seconds after deleting the file — not instantly on the first failed check.
    *   You will see the **`RESTARTS` count increment to 1**.
 
 ---
