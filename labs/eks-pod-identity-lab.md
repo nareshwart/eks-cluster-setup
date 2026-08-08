@@ -1,4 +1,4 @@
-# Lab Guide: Pod to AWS Communication (Amazon EKS Pod Identity)
+# Pod to AWS Communication (Amazon EKS Pod Identity)
 
 This lab guide explains how applications running inside EKS pods securely authenticate with AWS services (like S3, DynamoDB, or KMS) using **Amazon EKS Pod Identity** — the newer, simpler alternative to IRSA. You will associate an IAM Role directly with a Kubernetes ServiceAccount via the EKS Pod Identity Agent, deploy a test pod running the AWS CLI, and verify access.
 
