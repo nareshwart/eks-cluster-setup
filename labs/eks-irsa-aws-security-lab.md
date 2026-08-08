@@ -1,4 +1,4 @@
-# Lab Guide: Pod to AWS Communication (IAM Roles for Service Accounts - IRSA)
+# Pod to AWS Communication (IAM Roles for Service Accounts - IRSA)
 
 This lab guide explains how applications running inside EKS pods securely authenticate with AWS services (like S3, DynamoDB, or KMS) without storing static AWS access keys inside the containers. You will configure **IAM Roles for Service Accounts (IRSA)**, deploy a test pod running the AWS CLI, and verify access.
 
