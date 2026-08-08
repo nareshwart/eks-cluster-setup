@@ -286,6 +286,157 @@ kubectl delete namespace sa-lab
 
 ---
 
+## Real-World Example — An App Inside a Pod Fetching Live Data from the API Server
+
+The steps above proved the mechanics with raw `curl`. Now let's see how a **real application process** does this — using the official Kubernetes Python client, the same way a monitoring agent, custom controller, or autoscaler would. The app will run inside a Pod, call the API server using its mounted ServiceAccount, fetch live Pod data from its namespace, and process it (count Pods by phase).
+
+### 8a. Create the namespace, ServiceAccount, and RBAC
+
+```bash
+kubectl create namespace sa-app-demo
+```
+
+`app-sa.yaml`:
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pod-watcher-sa
+  namespace: sa-app-demo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-watcher-role
+  namespace: sa-app-demo
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pod-watcher-binding
+  namespace: sa-app-demo
+subjects:
+- kind: ServiceAccount
+  name: pod-watcher-sa
+  namespace: sa-app-demo
+roleRef:
+  kind: Role
+  name: pod-watcher-role
+  apiGroup: rbac.authorization.k8s.io
+```
+
+```bash
+kubectl apply -f app-sa.yaml
+```
+
+### 8b. Application code
+
+This small Python script uses `config.load_incluster_config()` — which internally reads the exact same token, CA cert, and namespace files from Step 2 — to authenticate to the API server, list Pods, and process the result (count by phase).
+
+`app.py` (packaged into a ConfigMap so we don't need to build an image):
+
+```python
+from kubernetes import client, config
+import time
+
+def main():
+    # Reads /var/run/secrets/kubernetes.io/serviceaccount/{token,ca.crt,namespace}
+    config.load_incluster_config()
+    v1 = client.CoreV1Api()
+
+    my_namespace = open(
+        "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+    ).read().strip()
+
+    while True:
+        pods = v1.list_namespaced_pod(namespace=my_namespace)
+
+        # "processing" the data fetched from the API server
+        phase_counts = {}
+        for pod in pods.items:
+            phase_counts[pod.status.phase] = phase_counts.get(pod.status.phase, 0) + 1
+
+        print(f"[{my_namespace}] Pod count by phase: {phase_counts}", flush=True)
+        time.sleep(10)
+
+if __name__ == "__main__":
+    main()
+```
+
+```bash
+kubectl create configmap pod-watcher-code -n sa-app-demo --from-file=app.py
+```
+
+### 8c. Deploy the app Pod bound to the ServiceAccount
+
+`app-pod.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-watcher-app
+  namespace: sa-app-demo
+spec:
+  serviceAccountName: pod-watcher-sa
+  containers:
+  - name: watcher
+    image: python:3.12-slim
+    command: ["sh", "-c", "pip install --quiet kubernetes && python /app/app.py"]
+    volumeMounts:
+    - name: code
+      mountPath: /app
+  volumes:
+  - name: code
+    configMap:
+      name: pod-watcher-code
+```
+
+```bash
+kubectl apply -f app-pod.yaml
+kubectl wait --for=condition=Ready pod/pod-watcher-app -n sa-app-demo --timeout=120s
+```
+
+### 8d. Validate — watch the app fetch and process live data
+
+```bash
+kubectl logs -f pod/pod-watcher-app -n sa-app-demo
+```
+
+Expected output, refreshing every 10 seconds:
+
+```
+[sa-app-demo] Pod count by phase: {'Running': 1}
+[sa-app-demo] Pod count by phase: {'Running': 1}
+```
+
+Now generate a real change and confirm the app "sees" it live through the API server — no restart of the app required:
+
+```bash
+kubectl run extra-pod --image=nginx -n sa-app-demo
+```
+
+Within ~10 seconds, the log output updates to reflect the new Pod:
+
+```
+[sa-app-demo] Pod count by phase: {'Running': 2}
+```
+
+> **Key Learning**: This is exactly what real controllers, operators, and monitoring tools do in production — they never store static credentials. They call `config.load_incluster_config()` (or the Go/Java/Node equivalent), which transparently uses the ServiceAccount token mounted in Step 2, and every API call is authorized against the RBAC rules bound to `pod-watcher-sa`. Try deleting the `RoleBinding` while the app is running to see the log output change to a `403 Forbidden` error on the very next poll — proving authorization is re-evaluated on every request, not just at startup.
+
+### 8e. Clean up this example
+
+```bash
+kubectl delete namespace sa-app-demo
+```
+
+---
+
 ## Key Takeaways
 
 1. **Every Pod has an identity** — explicitly assign one instead of relying on `default`.
