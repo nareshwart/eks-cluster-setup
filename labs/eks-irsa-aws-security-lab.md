@@ -132,7 +132,7 @@ We need to configure the role trust relationship to allow EKS OIDC token logins:
         {
           "Effect": "Allow",
           "Principal": {
-            "Federated": "arn:aws:iam://${ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER}"
+            "Federated": "arn:aws:iam::${ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER}"
           },
           "Action": "sts:AssumeRoleWithWebIdentity",
           "Condition": {
