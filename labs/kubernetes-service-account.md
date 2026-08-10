@@ -1,4 +1,4 @@
-# Lab Guide: How Kubernetes ServiceAccounts Authenticate to the API Server
+# How Kubernetes ServiceAccounts Authenticate to the API Server
 
 This lab is a walkthrough of how a Kubernetes **ServiceAccount** lets a process running inside a Pod talk to the Kubernetes API server. this lab focuses on the **mechanics of the token itself** — where it lives, what's inside it, how it's used to call the API directly with `curl`, and how it differs from the `default` ServiceAccount.
 
