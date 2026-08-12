@@ -34,12 +34,12 @@ module "cluster" {
   environment  = "dev"
   owner        = "platform-team"
 
-  instance_type = "t3.small"
+  instance_type = "t3.medium"
   node_count    = 2
 
   # Required - no default, to avoid CIDR collisions if you run multiple
   # clusters/examples in the same AWS account. Pick a unique range per cluster.
-  vpc_cidr = "10.0.0.0/16"
+  vpc_cidr = "10.80.0.0/16"
   pod_cidr = "100.64.0.0/16"
 
   # Add any other IAM users/roles (e.g. your console role) that need
