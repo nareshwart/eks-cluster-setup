@@ -381,3 +381,112 @@ We will now use Velero to restore the deleted application using the metadata and
     velero backup create prod-db-backup --selector app=database
     ```
 *   **Test Restores Regularly**: A backup is only as good as its restore. Schedule quarterly automated restore test runs inside an isolated dev namespace or staging cluster.
+
+---
+
+## Practice Exercises: Velero CLI Commands
+
+Hone your skills by practicing these essential Velero CLI operations. Try to complete the actions below and verify the results.
+
+### Exercise 1: Advanced Backup Filtering and Exclusions
+By default, Velero backs up everything in the specified namespace. Practice filtering backups using tags and exclusions:
+
+1. **Backup by Label Selector**:
+   Only back up resources labeled with `app=writer` in the `demo-app` namespace:
+   ```bash
+   velero backup create writer-only-backup \
+     --include-namespaces demo-app \
+     --selector app=writer
+   ```
+2. **Exclude Specific Resources**:
+   Back up the entire `demo-app` namespace but exclude PersistentVolumeClaims (PVCs):
+   ```bash
+   velero backup create no-pvc-backup \
+     --include-namespaces demo-app \
+     --exclude-resources persistentvolumeclaims,persistentvolumes
+   ```
+3. **Backup All Namespaces Except System Namespaces**:
+   Back up your entire cluster but exclude system namespaces:
+   ```bash
+   velero backup create cluster-backup-exclude-system \
+     --exclude-namespaces kube-system,kube-public,kube-node-lease,velero
+   ```
+
+### Exercise 2: Backup TTL (Time-To-Live) and Retention
+To prevent S3 storage costs from ballooning, practice specifying how long a backup should persist before Velero automatically deletes it.
+
+1. **Create a short-lived backup (valid for 2 hours)**:
+   ```bash
+   velero backup create temp-backup \
+     --include-namespaces demo-app \
+     --ttl 2h0m0s
+   ```
+2. **Verify the Expiration date**:
+   ```bash
+   velero backup describe temp-backup
+   ```
+   *(Look for the `Expiration:` field in the CLI output)*.
+
+### Exercise 3: Namespace Remapping during Restore
+One of Velero's most powerful features is the ability to restore backups to a completely different namespace. This is incredibly useful for testing or staging copies.
+
+1. **Restore `demo-app-backup` into a new namespace `demo-app-staging`**:
+   ```bash
+   velero restore create staging-restore \
+     --from-backup demo-app-backup \
+     --namespace-mappings demo-app:demo-app-staging
+   ```
+2. **Monitor the restore progress**:
+   ```bash
+   velero restore describe staging-restore
+   ```
+3. **Verify the new namespace**:
+   ```bash
+   kubectl get all -n demo-app-staging
+   ```
+4. **Cleanup the staging restore**:
+   ```bash
+   kubectl delete namespace demo-app-staging
+   # Delete the restore metadata from Velero
+   velero restore delete staging-restore --confirm
+   ```
+
+### Exercise 4: Schedule Operations
+Practice creating and managing scheduled backups.
+
+1. **Create a Cron schedule** to back up `demo-app` every 15 minutes:
+   ```bash
+   velero schedule create demo-app-15min \
+     --schedule="*/15 * * * *" \
+     --include-namespaces demo-app \
+     --ttl 1h0m0s
+   ```
+2. **List all schedules**:
+   ```bash
+   velero schedule get
+   ```
+3. **Manually trigger a backup immediately from an existing schedule**:
+   ```bash
+   velero backup create --from-schedule demo-app-15min
+   ```
+4. **Delete the schedule**:
+   ```bash
+   velero schedule delete demo-app-15min --confirm
+   ```
+
+### Exercise 5: Troubleshooting and Diagnostics
+Learn how to check for errors and inspect backups when something goes wrong.
+
+1. **Retrieve detailed logs for a backup**:
+   ```bash
+   velero backup logs demo-app-backup
+   ```
+2. **Retrieve logs for a restore operation**:
+   ```bash
+   velero restore logs <restore-name>
+   ```
+3. **Delete a backup and its associated S3 files**:
+   ```bash
+   velero backup delete demo-app-backup --confirm
+   ```
+
