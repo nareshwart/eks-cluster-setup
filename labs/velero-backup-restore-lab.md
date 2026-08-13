@@ -156,7 +156,7 @@ Use this option to understand how IAM OIDC trust relationships and Kubernetes se
     ```bash
     aws iam attach-role-policy \
       --role-name VeleroControllerRole-student1 \
-      --policy-arn arn:aws:iam://${ACCOUNT_ID}:policy/VeleroBackupPolicy-student1
+      --policy-arn arn:aws:iam::${ACCOUNT_ID}:policy/VeleroBackupPolicy-student1
     ```
 
 5.  **Create the Namespace**:
@@ -207,7 +207,7 @@ helm install velero vmware-tanzu/velero \
   --namespace velero \
   --set configuration.backupStorageLocation[0].name=aws \
   --set configuration.backupStorageLocation[0].provider=aws \
-  --set configuration.backupStorageLocation[0].bucket=student1-velero-backups \
+  --set configuration.backupStorageLocation[0].bucket=<use-your-bucket-name> \
   --set configuration.backupStorageLocation[0].config.region=us-east-2 \
   --set configuration.volumeSnapshotLocation[0].name=aws \
   --set configuration.volumeSnapshotLocation[0].provider=aws \
@@ -219,7 +219,8 @@ helm install velero vmware-tanzu/velero \
   --set serviceAccount.server.create=false \
   --set serviceAccount.server.name=velero-server \
   --set snapshotsEnabled=true \
-  --set deployRestic=false
+  --set credentials.useSecret=false \
+  --set deployNodeAgent=false
 ```
 
 Verify that the Velero pods are active:
