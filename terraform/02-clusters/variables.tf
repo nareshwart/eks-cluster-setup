@@ -73,7 +73,7 @@ variable "default_cluster_config" {
     capacity_type                = "ON_DEMAND"
     node_count                   = 2
     node_min_size                = 2
-    node_max_size                = 3
+    node_max_size                = 5
     enable_managed_node_group    = true
     enable_unmanaged_node_group  = false
     vpc_cidr                     = "10.0.0.0/16"

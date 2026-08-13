@@ -66,7 +66,7 @@ variable "node_min_size" {
 
 variable "node_max_size" {
   type    = number
-  default = 3
+  default = 5
 }
 
 variable "enable_managed_node_group" {
