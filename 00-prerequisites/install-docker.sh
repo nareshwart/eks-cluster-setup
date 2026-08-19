@@ -1,186 +1,157 @@
 #!/bin/bash
 
 # =============================================
-# cri-dockerd Installer
-# Supports: Ubuntu, Amazon Linux 2, AL2023,
-#           CentOS / RHEL
+# Install Latest Docker CE on Amazon Linux 2023
 # =============================================
-# cri-dockerd is required when using Docker as
-# the container runtime with Kubernetes 1.24+
-# (after CRI enforcement)
+# AL2023 does NOT use amazon-linux-extras.
+# This script adds Docker's official repo and
+# installs the latest Docker CE via dnf.
 # =============================================
 
-VER="0.4.3"
-LOG_FILE="/var/log/cri-dockerd-install.log"
+set -e  # Exit immediately on any error
+
+LOG_FILE="/var/log/docker-install.log"
 DATE=$(date '+%Y-%m-%d %H:%M:%S')
 
+# Redirect all output to log file AND terminal
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "============================================"
-echo "[$DATE] cri-dockerd v${VER} Installer"
+echo "[$DATE] Docker Installation Started"
+echo "[$DATE] OS: $(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2)"
 echo "============================================"
 
 # -----------------------------------------------
-# Helper: install dependencies per distro
-# -----------------------------------------------
-install_deps_dnf() {
-    echo "[$DATE] Installing dependencies via dnf..."
-    dnf install -y wget tar
-}
-
-install_deps_apt() {
-    echo "[$DATE] Installing dependencies via apt..."
-    apt-get update -y
-    apt-get install -y wget tar
-}
-
-# -----------------------------------------------
-# Core installer function
-# -----------------------------------------------
-install_cri_dockerd() {
-    local ARCH=$1
-
-    echo ""
-    echo "[$DATE] ── Installing cri-dockerd binary ──"
-
-    if [ -f /usr/bin/cri-dockerd ]; then
-        echo "[$DATE] cri-dockerd is already installed:"
-        cri-dockerd --version
-    else
-        echo "[$DATE] Downloading cri-dockerd v${VER} (${ARCH})..."
-
-        wget -q \
-            "https://github.com/Mirantis/cri-dockerd/releases/download/v${VER}/cri-dockerd-${VER}.${ARCH}.tgz" \
-            -O /tmp/cri-dockerd.tgz
-
-        echo "[$DATE] Extracting archive..."
-        tar -xzf /tmp/cri-dockerd.tgz -C /tmp
-
-        echo "[$DATE] Installing binary to /usr/bin/cri-dockerd..."
-        mv /tmp/cri-dockerd/cri-dockerd /usr/bin/
-        chmod 755 /usr/bin/cri-dockerd
-
-        echo "[$DATE] cri-dockerd binary installed: $(cri-dockerd --version)"
-    fi
-
-    echo ""
-    echo "[$DATE] ── Configuring systemd services ──"
-
-    if [ -f /etc/systemd/system/cri-docker.service ] && \
-       [ -f /etc/systemd/system/cri-docker.socket ]; then
-        echo "[$DATE] systemd services already configured. Skipping."
-    else
-        echo "[$DATE] Downloading systemd service files..."
-
-        wget -q \
-            https://raw.githubusercontent.com/Mirantis/cri-dockerd/master/packaging/systemd/cri-docker.service \
-            -O /tmp/cri-docker.service
-
-        wget -q \
-            https://raw.githubusercontent.com/Mirantis/cri-dockerd/master/packaging/systemd/cri-docker.socket \
-            -O /tmp/cri-docker.socket
-
-        echo "[$DATE] Installing service files..."
-
-        # AL2023 / RHEL use /usr/lib/systemd/system (preferred over /lib/systemd/system)
-        if [ -d /usr/lib/systemd/system ]; then
-            mv /tmp/cri-docker.service /tmp/cri-docker.socket /usr/lib/systemd/system/
-        else
-            mv /tmp/cri-docker.service /tmp/cri-docker.socket /lib/systemd/system/
-        fi
-
-        echo "[$DATE] Reloading systemd daemon..."
-        systemctl daemon-reload
-
-        echo "[$DATE] Enabling services..."
-        systemctl enable cri-docker.service
-        systemctl enable cri-docker.socket
-
-        echo "[$DATE] Starting services..."
-        systemctl start cri-docker.service
-
-        echo "[$DATE] Services enabled and started."
-    fi
-
-    echo ""
-    echo "[$DATE] ── Service Status ──"
-    systemctl status cri-docker.service --no-pager -l
-}
-
-# -----------------------------------------------
-# MAIN — Detect OS and run installer
-# -----------------------------------------------
-if [ ! -f /etc/os-release ]; then
-    echo "[$DATE] ERROR: Cannot locate /etc/os-release — unable to determine OS."
-    exit 8
-fi
-
-# Parse OS ID and VERSION_ID
-OS_ID=$(grep -E "^ID=" /etc/os-release | cut -d'=' -f2 | tr -d '"')
-OS_VERSION=$(grep -E "^VERSION_ID=" /etc/os-release | cut -d'=' -f2 | tr -d '"')
-OS_NAME=$(grep -E "^PRETTY_NAME=" /etc/os-release | cut -d'=' -f2 | tr -d '"')
-
-echo "[$DATE] Detected OS : $OS_NAME"
-echo "[$DATE] OS ID       : $OS_ID"
-echo "[$DATE] OS Version  : $OS_VERSION"
-
-case "$OS_ID" in
-
-    ubuntu)
-        echo "[$DATE] Distribution: Ubuntu"
-        ARCH=$(dpkg --print-architecture)
-        install_deps_apt
-        install_cri_dockerd "$ARCH"
-        ;;
-
-    amzn)
-        # Covers both Amazon Linux 2 (VERSION_ID=2) and AL2023 (VERSION_ID=2023)
-        if [ "$OS_VERSION" = "2023" ]; then
-            echo "[$DATE] Distribution: Amazon Linux 2023 (AL2023)"
-        else
-            echo "[$DATE] Distribution: Amazon Linux 2"
-        fi
-        ARCH="amd64"
-        install_deps_dnf
-        install_cri_dockerd "$ARCH"
-        ;;
-
-    centos | rhel | rocky | almalinux)
-        echo "[$DATE] Distribution: $OS_ID $OS_VERSION"
-        ARCH="amd64"
-        install_deps_dnf
-        install_cri_dockerd "$ARCH"
-        ;;
-
-    fedora)
-        echo "[$DATE] Distribution: Fedora $OS_VERSION"
-        ARCH="amd64"
-        install_deps_dnf
-        install_cri_dockerd "$ARCH"
-        ;;
-
-    *)
-        echo "[$DATE] ERROR: Unsupported OS: $OS_ID"
-        echo "[$DATE] Supported: ubuntu, amzn (AL2 / AL2023), centos, rhel, rocky, almalinux, fedora"
-        exit 1
-        ;;
-
-esac
-
-# -----------------------------------------------
-# Final verification
+# STEP 1: Remove any old/conflicting packages
 # -----------------------------------------------
 echo ""
-echo "============================================"
-echo "[$DATE] cri-dockerd Installation COMPLETE!"
-echo "[$DATE] Version : $(cri-dockerd --version 2>&1)"
-echo "[$DATE]"
-echo "[$DATE] Socket  : /var/run/cri-dockerd.sock"
-echo "[$DATE]"
-echo "[$DATE] Use this socket with kubeadm:"
-echo "[$DATE]   sudo kubeadm init \\"
-echo "[$DATE]     --cri-socket unix:///var/run/cri-dockerd.sock \\"
-echo "[$DATE]     --pod-network-cidr=192.168.0.0/16"
-echo "============================================"
+echo "[$DATE] STEP 1: Removing old Docker packages (if any)..."
 
-exit 0
+dnf remove -y docker \
+    docker-client \
+    docker-client-latest \
+    docker-common \
+    docker-latest \
+    docker-latest-logrotate \
+    docker-logrotate \
+    docker-engine \
+    podman \
+    runc 2>/dev/null || true
+
+echo "[$DATE] Old packages cleaned up."
+
+# -----------------------------------------------
+# STEP 2: Install required dependencies
+# -----------------------------------------------
+echo ""
+echo "[$DATE] STEP 2: Installing required dependencies..."
+
+# NOTE: AL2023 ships with curl-minimal by default.
+# Installing the full 'curl' package conflicts with curl-minimal.
+# curl-minimal is sufficient for Docker repo setup — do NOT install curl.
+dnf install -y \
+    dnf-plugins-core \
+    git
+
+echo "[$DATE] Dependencies installed."
+
+
+# -----------------------------------------------
+# STEP 3: Add Docker's official repository
+# -----------------------------------------------
+echo ""
+echo "[$DATE] STEP 3: Adding Docker's official repository..."
+
+# NOTE: AL2023 version string (e.g. 2023.12.xxx) breaks dnf config-manager
+# auto-detection — it generates a 404 URL. Fix: manually write the repo file
+# using the explicit RHEL 9 baseurl (AL2023 is RHEL 9 compatible).
+
+cat > /etc/yum.repos.d/docker-ce.repo << 'EOF'
+[docker-ce-stable]
+name=Docker CE Stable - $basearch
+baseurl=https://download.docker.com/linux/rhel/9/$basearch/stable
+enabled=1
+gpgcheck=1
+gpgkey=https://download.docker.com/linux/rhel/gpg
+
+[docker-ce-stable-debuginfo]
+name=Docker CE Stable - Debuginfo $basearch
+baseurl=https://download.docker.com/linux/rhel/9/debug-$basearch/stable
+enabled=0
+gpgcheck=1
+gpgkey=https://download.docker.com/linux/rhel/gpg
+EOF
+
+echo "[$DATE] Docker repo file created at /etc/yum.repos.d/docker-ce.repo"
+dnf makecache
+echo "[$DATE] Docker repo metadata refreshed."
+
+# -----------------------------------------------
+# STEP 4: Install Docker CE (latest version)
+# -----------------------------------------------
+echo ""
+echo "[$DATE] STEP 4: Installing Docker CE (latest)..."
+
+dnf install -y \
+    docker-ce \
+    docker-ce-cli \
+    containerd.io \
+    docker-buildx-plugin \
+    docker-compose-plugin
+
+echo "[$DATE] Docker CE installed successfully."
+
+# -----------------------------------------------
+# STEP 5: Enable and Start Docker service
+# -----------------------------------------------
+echo ""
+echo "[$DATE] STEP 5: Enabling and starting Docker service..."
+
+systemctl enable docker
+systemctl start docker
+
+echo "[$DATE] Docker service started."
+
+# -----------------------------------------------
+# STEP 6: Add ec2-user to docker group
+# (Run docker without sudo)
+# -----------------------------------------------
+echo ""
+echo "[$DATE] STEP 6: Adding ec2-user to docker group..."
+
+usermod -aG docker ec2-user
+
+echo "[$DATE] ec2-user added to docker group."
+
+# -----------------------------------------------
+# STEP 7: Verify Installation
+# -----------------------------------------------
+echo ""
+echo "[$DATE] STEP 7: Verifying Docker installation..."
+
+DOCKER_VERSION=$(docker --version)
+COMPOSE_VERSION=$(docker compose version)
+
+echo "[$DATE] $DOCKER_VERSION"
+echo "[$DATE] $COMPOSE_VERSION"
+
+echo ""
+echo "[$DATE] Docker service status:"
+systemctl status docker --no-pager -l
+
+# -----------------------------------------------
+# STEP 8: Run hello-world to confirm it works
+# -----------------------------------------------
+echo ""
+echo "[$DATE] STEP 8: Running docker hello-world test..."
+docker run --rm hello-world
+
+echo ""
+echo "============================================"
+echo "[$DATE] Docker Installation COMPLETE!"
+echo "[$DATE] Docker Version : $DOCKER_VERSION"
+echo "[$DATE] Compose Version: $COMPOSE_VERSION"
+echo "[$DATE]"
+echo "[$DATE] IMPORTANT: Log out and back in (or run 'newgrp docker')"
+echo "[$DATE] for the docker group to take effect for ec2-user."
+echo "============================================"
