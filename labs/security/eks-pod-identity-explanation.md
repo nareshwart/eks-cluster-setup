@@ -113,4 +113,4 @@ aws eks create-pod-identity-association \
 *   **Clear separation of concerns**: The IAM Role answers "what can this identity do," while the Association answers "which ServiceAccount is this identity" — auditable independently as a first-class AWS API object.
 *   **Zero hardcoded secrets**: Same as IRSA — credentials are ephemeral, automatically rotated, and never stored on disk or in Kubernetes Secrets.
 
-For the hands-on lab walking through this end-to-end (including a side-by-side IRSA vs. Pod Identity comparison table), see [eks-pod-identity-lab.md](eks-pod-identity-lab.md).
+For the hands-on lab walking through this end-to-end (including a side-by-side IRSA vs. Pod Identity comparison table), see [04-eks-pod-identity-lab.md](04-eks-pod-identity-lab.md).

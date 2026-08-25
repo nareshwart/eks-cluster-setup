@@ -11,7 +11,7 @@ This lab guide explains how the Kubernetes **Horizontal Pod Autoscaler (HPA)** a
   ```bash
   kubectl get deployment metrics-server -n kube-system
   ```
-  If missing, install it (see [eksctl/04-addons/install-metrics-server.sh](../eksctl/04-addons/install-metrics-server.sh)).
+  If missing, install it (see [eksctl/04-addons/install-metrics-server.sh](../../eksctl/04-addons/install-metrics-server.sh)).
 
 ---
 

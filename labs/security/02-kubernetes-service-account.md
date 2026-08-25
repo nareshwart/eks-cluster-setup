@@ -38,7 +38,7 @@ sequenceDiagram
 
 ## Prerequisites
 
-- A working EKS/Kubernetes cluster and `kubectl` configured against it (see [01-eksctl-lab.md](01-eksctl-lab.md) or [02-terraform-lab.md](02-terraform-lab.md)).
+- A working EKS/Kubernetes cluster and `kubectl` configured against it (see [01-eksctl-lab.md](../01-eksctl-lab.md) or [02-terraform-lab.md](../02-terraform-lab.md)).
 - `jq` and `base64` available on your local machine (used to decode the JWT).
 
 ---
