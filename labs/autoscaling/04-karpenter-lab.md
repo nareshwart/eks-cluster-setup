@@ -212,23 +212,23 @@ kubectl create namespace karpenter
 
 # Create the service account and role with EKSCTL
 eksctl create iamserviceaccount \
-  --cluster=student1 \
+  --cluster=$CLUSTER_NAME \
   --namespace=karpenter \
   --name=karpenter \
-  --role-name=KarpenterControllerRole-student1 \
+  --role-name=KarpenterControllerRole-$CLUSTER_NAME \
   --attach-policy-arn=arn:aws:iam::aws:policy/AmazonEC2FullAccess \
   --override-existing-serviceaccounts \
   --approve
 
 # Attach EKS Cluster Describe inline policy for cluster discovery
 aws iam put-role-policy \
-  --role-name KarpenterControllerRole-student1 \
+  --role-name KarpenterControllerRole-$CLUSTER_NAME \
   --policy-name KarpenterEKSClusterDiscovery \
   --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["eks:DescribeCluster"],"Resource":"*"}]}'
 
 # Attach IAM, PassRole, Pricing & SSM inline policy for node launch config
 aws iam put-role-policy \
-  --role-name KarpenterControllerRole-student1 \
+  --role-name KarpenterControllerRole-$CLUSTER_NAME \
   --policy-name KarpenterIAMOperations \
   --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["iam:GetInstanceProfile","iam:CreateInstanceProfile","iam:AddRoleToInstanceProfile","iam:RemoveRoleFromInstanceProfile","iam:DeleteInstanceProfile","iam:TagInstanceProfile","iam:ListInstanceProfiles","iam:PassRole","pricing:GetProducts","ssm:GetParameter"],"Resource":"*"}]}'
 ```
@@ -240,7 +240,7 @@ Use this option to manually set up OIDC identity federation and deploy the Servi
 
 1.  **Retrieve EKS OIDC Provider and AWS Account Details**:
     ```bash
-    OIDC_PROVIDER=$(aws eks describe-cluster --name student1 --query "cluster.identity.oidc.issuer" --output text | sed -e "s/https:\/\///")
+    OIDC_PROVIDER=$(aws eks describe-cluster --name $CLUSTER_NAME --query "cluster.identity.oidc.issuer" --output text | sed -e "s/https:\/\///")
     ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
     ```
 
@@ -272,23 +272,23 @@ Use this option to manually set up OIDC identity federation and deploy the Servi
     ```bash
     # Create the IAM role using the trust policy
     aws iam create-role \
-      --role-name KarpenterControllerRole-student1 \
+      --role-name KarpenterControllerRole-$CLUSTER_NAME \
       --assume-role-policy-document file://trust-policy.json
 
     # Attach the EC2 full access policy to the role
     aws iam attach-role-policy \
-      --role-name KarpenterControllerRole-student1 \
+      --role-name KarpenterControllerRole-$CLUSTER_NAME \
       --policy-arn arn:aws:iam::aws:policy/AmazonEC2FullAccess
 
     # Attach EKS Cluster Describe inline policy for cluster discovery
     aws iam put-role-policy \
-      --role-name KarpenterControllerRole-student1 \
+      --role-name KarpenterControllerRole-$CLUSTER_NAME \
       --policy-name KarpenterEKSClusterDiscovery \
       --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["eks:DescribeCluster"],"Resource":"*"}]}'
 
     # Attach IAM, PassRole, Pricing & SSM inline policy for node launch config
     aws iam put-role-policy \
-      --role-name KarpenterControllerRole-student1 \
+      --role-name KarpenterControllerRole-$CLUSTER_NAME \
       --policy-name KarpenterIAMOperations \
       --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["iam:GetInstanceProfile","iam:CreateInstanceProfile","iam:AddRoleToInstanceProfile","iam:RemoveRoleFromInstanceProfile","iam:DeleteInstanceProfile","iam:TagInstanceProfile","iam:ListInstanceProfiles","iam:PassRole","pricing:GetProducts","ssm:GetParameter"],"Resource":"*"}]}'
     ```
@@ -307,7 +307,7 @@ Use this option to manually set up OIDC identity federation and deploy the Servi
       name: karpenter
       namespace: karpenter
       annotations:
-        eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/KarpenterControllerRole-student1
+        eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/KarpenterControllerRole-$CLUSTER_NAME
     ```
 
 6.  **Apply the manifest**:
@@ -333,7 +333,7 @@ Use this option to manually set up OIDC identity federation and deploy the Servi
       --version 1.14.1 \
       --set serviceAccount.create=false \
       --set serviceAccount.name=karpenter \
-      --set settings.clusterName=student1 \
+      --set settings.clusterName=$CLUSTER_NAME \
       --set replicas=1 \
       --wait
     ```
@@ -373,15 +373,15 @@ spec:
   amiSelectorTerms:
     - alias: al2023@latest
   # Replace with your actual Karpenter Node Role name
-  role: KarpenterNodeRole-<your-cluster-name>
+  role: KarpenterNodeRole-$CLUSTER_NAME
   subnetSelectorTerms:
     - tags:
         # Must match the tag value used in Step 1
-        karpenter.sh/discovery: <your-cluster-name>
+        karpenter.sh/discovery: $CLUSTER_NAME
   securityGroupSelectorTerms:
     - tags:
         # Must match the tag value used in Step 1
-        karpenter.sh/discovery: <your-cluster-name>
+        karpenter.sh/discovery: $CLUSTER_NAME
 ---
 apiVersion: karpenter.sh/v1
 kind: NodePool
@@ -637,12 +637,12 @@ EOF
 ### 1. Karpenter Controller Pod Fails to Start (CrashLoopBackOff)
 * **Symptom**: Pod logs show access denied errors or fail to authenticate with AWS.
 * **Causes**:
-  * **IRSA Role Mismatch**: The IAM Role `KarpenterControllerRole-student1` trust policy must contain the correct OIDC provider ID and service account namespace/name (`karpenter/karpenter`).
+  * **IRSA Role Mismatch**: The IAM Role `KarpenterControllerRole-$CLUSTER_NAME` trust policy must contain the correct OIDC provider ID and service account namespace/name (`karpenter/karpenter`).
   * **Missing ServiceAccount Annotation**: Verify the `karpenter` ServiceAccount has the correct annotation:
     ```bash
     kubectl get serviceaccount karpenter -n karpenter -o yaml
     ```
-    Ensure it matches `eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/KarpenterControllerRole-student1`.
+    Ensure it matches `eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/KarpenterControllerRole-$CLUSTER_NAME`.
 
 ### 2. Pods Remain Pending and Karpenter Does Not Scale Up
 * **Symptom**: Pods are `Pending` with scheduling failure events, but no EC2 instances are provisioned.
@@ -650,8 +650,8 @@ EOF
   * **Missing Subnet/Security Group Tags**: Karpenter discovers subnets and security groups using tags. Verify that you ran the `aws ec2 create-tags` commands in Step 1.
     Run these commands to verify the tags exist:
     ```bash
-    aws ec2 describe-subnets --filters "Name=tag:karpenter.sh/discovery,Values=student1" --query "Subnets[*].SubnetId" --region us-east-2
-    aws ec2 describe-security-groups --filters "Name=tag:karpenter.sh/discovery,Values=student1" --query "SecurityGroups[*].GroupId" --region us-east-2
+    aws ec2 describe-subnets --filters "Name=tag:karpenter.sh/discovery,Values=$CLUSTER_NAME" --query "Subnets[*].SubnetId" --region us-east-2
+    aws ec2 describe-security-groups --filters "Name=tag:karpenter.sh/discovery,Values=$CLUSTER_NAME" --query "SecurityGroups[*].GroupId" --region us-east-2
     ```
   * **Incorrect nodeClassRef**: In Karpenter v1, the `nodeClassRef` requires all three fields — `group`, `kind`, and `name`. If you only specify `name:`, it will not resolve.
     ```yaml
@@ -666,7 +666,7 @@ EOF
 ### 3. Controller Logs Show `UnauthorizedOperation` or `AccessDenied`
 * **Symptom**: Logs show `UnauthorizedOperation: You are not authorized to perform this operation.` when calling `ec2:RunInstances` or `ec2:DescribeAvailabilityZones`.
 * **Causes**:
-  * **IAM Policy Permissions**: The `KarpenterControllerRole-student1` requires EC2 permissions. If you didn't use Option A (`eksctl` with `AmazonEC2FullAccess` policy), verify that the manual IAM role has the `AmazonEC2FullAccess` policy (or equivalent scoped policy) attached.
+  * **IAM Policy Permissions**: The `KarpenterControllerRole-$CLUSTER_NAME` requires EC2 permissions. If you didn't use Option A (`eksctl` with `AmazonEC2FullAccess` policy), verify that the manual IAM role has the `AmazonEC2FullAccess` policy (or equivalent scoped policy) attached.
   * **Instance Profile Missing**: Ensure the instance profile configured in Karpenter's Helm values/settings matches the Karpenter Node Role.
 
 ### 4. CRD Version Error (v1beta1 not found)
@@ -735,7 +735,7 @@ helm uninstall karpenter --namespace karpenter
   ```bash
   # Delete the IAM ServiceAccount
   eksctl delete iamserviceaccount \
-    --cluster=student1 \
+    --cluster=$CLUSTER_NAME \
     --namespace=karpenter \
     --name=karpenter
 
@@ -749,22 +749,22 @@ helm uninstall karpenter --namespace karpenter
   kubectl delete namespace karpenter
 
   # Delete inline policies, detach managed policies, and delete the Controller IAM Role
-  aws iam delete-role-policy --role-name KarpenterControllerRole-student1 --policy-name KarpenterEKSClusterDiscovery
-  aws iam delete-role-policy --role-name KarpenterControllerRole-student1 --policy-name KarpenterIAMOperations
-  aws iam detach-role-policy --role-name KarpenterControllerRole-student1 --policy-arn arn:aws:iam::aws:policy/AmazonEC2FullAccess
-  aws iam delete-role --role-name KarpenterControllerRole-student1
+  aws iam delete-role-policy --role-name KarpenterControllerRole-$CLUSTER_NAME --policy-name KarpenterEKSClusterDiscovery
+  aws iam delete-role-policy --role-name KarpenterControllerRole-$CLUSTER_NAME --policy-name KarpenterIAMOperations
+  aws iam detach-role-policy --role-name KarpenterControllerRole-$CLUSTER_NAME --policy-arn arn:aws:iam::aws:policy/AmazonEC2FullAccess
+  aws iam delete-role --role-name KarpenterControllerRole-$CLUSTER_NAME
   ```
 
 ### 4. Delete the Karpenter Node IAM Role
 Remove the policy attachments and delete the node IAM role:
 
 ```bash
-aws iam detach-role-policy --role-name KarpenterNodeRole-student1 --policy-arn arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
-aws iam detach-role-policy --role-name KarpenterNodeRole-student1 --policy-arn arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
-aws iam detach-role-policy --role-name KarpenterNodeRole-student1 --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
-aws iam detach-role-policy --role-name KarpenterNodeRole-student1 --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+aws iam detach-role-policy --role-name KarpenterNodeRole-$CLUSTER_NAME --policy-arn arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+aws iam detach-role-policy --role-name KarpenterNodeRole-$CLUSTER_NAME --policy-arn arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+aws iam detach-role-policy --role-name KarpenterNodeRole-$CLUSTER_NAME --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+aws iam detach-role-policy --role-name KarpenterNodeRole-$CLUSTER_NAME --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
 
-aws iam delete-role --role-name KarpenterNodeRole-student1
+aws iam delete-role --role-name KarpenterNodeRole-$CLUSTER_NAME
 ```
 
 ### 5. Remove AWS Discovery Tags
@@ -779,7 +779,7 @@ aws ec2 delete-tags \
 
 # Remove tags from Primary Security Group
 aws ec2 delete-tags \
-  --resources $(aws eks describe-cluster --name student1 --query "cluster.resourcesVpcConfig.clusterSecurityGroupId" --output text) \
+  --resources $(aws eks describe-cluster --name $CLUSTER_NAME --query "cluster.resourcesVpcConfig.clusterSecurityGroupId" --output text) \
   --tags Key=karpenter.sh/discovery \
   --region us-east-2
 ```
