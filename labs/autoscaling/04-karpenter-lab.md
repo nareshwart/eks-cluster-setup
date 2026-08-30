@@ -122,11 +122,11 @@ Karpenter requires two IAM roles:
 2.  **Karpenter Controller Role**: Attached to the Karpenter pod to authorize it to call EC2 APIs.
 
 ### 2a. Create the Karpenter Node IAM Role
-Create a node role named `KarpenterNodeRole-student1` and attach the required EKS/EC2 managed policies:
+Create a node role named `KarpenterNodeRole-$CLUSTER_NAME` and attach the required EKS/EC2 managed policies:
 
 ```bash
 # 1. Create the base IAM Role with EC2 trust policy
-aws iam create-role --role-name KarpenterNodeRole-student1 --assume-role-policy-document '{
+aws iam create-role --role-name KarpenterNodeRole-${CLUSTER_NAME} --assume-role-policy-document '{
   "Version": "2012-10-17",
   "Statement": [
     {
@@ -140,10 +140,10 @@ aws iam create-role --role-name KarpenterNodeRole-student1 --assume-role-policy-
 }'
 
 # 2. Attach EKS node policies
-aws iam attach-role-policy --role-name KarpenterNodeRole-student1 --policy-arn arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
-aws iam attach-role-policy --role-name KarpenterNodeRole-student1 --policy-arn arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
-aws iam attach-role-policy --role-name KarpenterNodeRole-student1 --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
-aws iam attach-role-policy --role-name KarpenterNodeRole-student1 --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+aws iam attach-role-policy --role-name KarpenterNodeRole-${CLUSTER_NAME} --policy-arn arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+aws iam attach-role-policy --role-name KarpenterNodeRole-${CLUSTER_NAME} --policy-arn arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+aws iam attach-role-policy --role-name KarpenterNodeRole-${CLUSTER_NAME} --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+aws iam attach-role-policy --role-name KarpenterNodeRole-${CLUSTER_NAME} --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
 ```
 
 ### 2b. Register the Karpenter Node Role with EKS (Mandatory)
