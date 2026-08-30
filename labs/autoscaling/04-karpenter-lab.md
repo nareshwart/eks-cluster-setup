@@ -44,7 +44,7 @@ REGION=us-east-2
 List all subnets and identify your **node subnets** (typically named `*node*`, `*private*`, or `*worker*` — **not** `*pods*` or `*secondary*`):
 ```bash
 # Set the name pattern matching your node subnets (e.g. *public*, *node*, *private*)
-NODE_SUBNET_PATTERN="*public*"
+NODE_SUBNET_PATTERN="*nareshwar*"
 
 aws ec2 describe-subnets \
   --filters "Name=tag:Name,Values=${NODE_SUBNET_PATTERN}" \
@@ -60,26 +60,12 @@ aws ec2 describe-subnets \
 >   --output table --region $REGION
 > ```
 
-Before tagging, **verify the node subnet has a NAT gateway route** (required for EC2 API access during bootstrap):
-```bash
-# Replace <subnet-id> with one of your node subnet IDs from above
-SUBNET_ID=<subnet-id>
-RT_ID=$(aws ec2 describe-route-tables \
-  --filters "Name=association.subnet-id,Values=$SUBNET_ID" \
-  --query "RouteTables[*].RouteTableId" --output text --region $REGION)
-
-# Look for a route with NatGatewayId (nat-xxx) or GatewayId (igw-xxx)
-aws ec2 describe-route-tables --route-table-ids $RT_ID \
-  --query "RouteTables[*].Routes[*].{Dest:DestinationCidrBlock,Gateway:GatewayId,NAT:NatGatewayId}" \
-  --output table --region $REGION
-```
-
-If the output shows a `nat-xxx` or `igw-xxx` entry for `0.0.0.0/0` — this is the correct subnet. Now tag your node subnets:
+tag your node subnets:
 ```bash
 # Replace *node* with your actual node subnet name pattern
 aws ec2 create-tags \
   --resources $(aws ec2 describe-subnets \
-    --filters "Name=tag:Name,Values=*node*" \
+    --filters "Name=tag:Name,Values=*nareshwar-public*" \
     --query "Subnets[*].SubnetId" --output text) \
   --tags Key=karpenter.sh/discovery,Value=$CLUSTER_NAME \
   --region $REGION
