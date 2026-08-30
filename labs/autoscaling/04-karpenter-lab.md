@@ -9,8 +9,8 @@ This guide walks you through deploying **Karpenter v1.x**, a modern, high-perfor
 ## Overview
 
 ```
-Step 1 → Tag Subnets & Security Groups for Discovery
-Step 2 → Create IAM Roles and ServiceAccount (IRSA)
+Step 1 → Tag Node Subnets & Security Groups for Discovery
+Step 2 → Create IAM Roles, Register Node Role with EKS, and ServiceAccount (IRSA)
 Step 3 → Install Karpenter via Helm (v1.14.1)
 Step 4 → Configure NodePool & EC2NodeClass CRDs (v1 API)
 Step 5 → Test Fast Scale-Up
@@ -24,24 +24,96 @@ Step 7 → Advanced Scaling: Spot Instances with Taints and Tolerations
 
 Karpenter dynamically discovers which subnets and security groups to use for new nodes by scanning AWS resources for specific discovery tags.
 
-Run the following commands to tag your cluster's resources (replace `student1` with your cluster name and `us-east-2` with your region):
-
-### 1a. Discover Subnets and tag them:
+First, set your cluster name and region as variables — you'll reuse these throughout the lab:
 ```bash
-# Tag the pod subnets
-aws ec2 create-tags \
-  --resources $(aws ec2 describe-subnets --filters "Name=tag:Name,Values=*pods*" --query "Subnets[*].SubnetId" --output text) \
-  --tags Key=karpenter.sh/discovery,Value=student1 \
-  --region us-east-2
+CLUSTER_NAME=<your-cluster-name>   # e.g. eks-nareshwar-cluster
+REGION=us-east-2
 ```
 
-### 1b. Discover EKS Node Security Group and tag it:
+> **Important — Node Subnets vs Pod Subnets**: If your EKS cluster uses **custom networking** (separate pod CIDRs / secondary VPC CIDRs), you have two types of subnets:
+>
+> | Subnet Type | Purpose | Has NAT Gateway? | Use for Karpenter? |
+> |---|---|---|---|
+> | **Node subnets** | EC2 instance ENI (primary NIC) | ✅ Yes | ✅ **Yes** |
+> | **Pod subnets** | VPC CNI secondary IP allocation | ❌ No | ❌ **No** |
+>
+> Karpenter **must tag node subnets only**. Tagging pod subnets causes new nodes to launch in subnets without internet access — the node bootstrap agent (`nodeadm`) will fail with repeated `EC2/DescribeInstances` retry loops and the node will never join the cluster.
+
+### 1a. Identify and tag the correct Node Subnets
+
+List all subnets and identify your **node subnets** (typically named `*node*`, `*private*`, or `*worker*` — **not** `*pods*` or `*secondary*`):
 ```bash
-# Tag the EKS Cluster Primary Security Group
+aws ec2 describe-subnets \
+  --query "Subnets[*].{ID:SubnetId,Name:Tags[?Key=='Name']|[0].Value,CIDR:CidrBlock}" \
+  --output table \
+  --region $REGION
+```
+
+Before tagging, **verify the node subnet has a NAT gateway route** (required for EC2 API access during bootstrap):
+```bash
+# Replace <subnet-id> with one of your node subnet IDs from above
+SUBNET_ID=<subnet-id>
+RT_ID=$(aws ec2 describe-route-tables \
+  --filters "Name=association.subnet-id,Values=$SUBNET_ID" \
+  --query "RouteTables[*].RouteTableId" --output text --region $REGION)
+
+# Look for a route with NatGatewayId (nat-xxx) or GatewayId (igw-xxx)
+aws ec2 describe-route-tables --route-table-ids $RT_ID \
+  --query "RouteTables[*].Routes[*].{Dest:DestinationCidrBlock,Gateway:GatewayId,NAT:NatGatewayId}" \
+  --output table --region $REGION
+```
+
+If the output shows a `nat-xxx` or `igw-xxx` entry for `0.0.0.0/0` — this is the correct subnet. Now tag your node subnets:
+```bash
+# Replace *node* with your actual node subnet name pattern
 aws ec2 create-tags \
-  --resources $(aws eks describe-cluster --name student1 --query "cluster.resourcesVpcConfig.clusterSecurityGroupId" --output text) \
-  --tags Key=karpenter.sh/discovery,Value=student1 \
-  --region us-east-2
+  --resources $(aws ec2 describe-subnets \
+    --filters "Name=tag:Name,Values=*node*" \
+    --query "Subnets[*].SubnetId" --output text) \
+  --tags Key=karpenter.sh/discovery,Value=$CLUSTER_NAME \
+  --region $REGION
+```
+
+### 1b. Discover and tag the EKS Cluster Security Group
+
+First, retrieve and confirm the cluster's primary security group ID:
+```bash
+# Get the cluster security group ID
+CLUSTER_SG=$(aws eks describe-cluster \
+  --name $CLUSTER_NAME \
+  --query "cluster.resourcesVpcConfig.clusterSecurityGroupId" \
+  --output text \
+  --region $REGION)
+
+echo "Cluster Security Group ID: $CLUSTER_SG"
+```
+
+Apply the discovery tag:
+```bash
+aws ec2 create-tags \
+  --resources $CLUSTER_SG \
+  --tags Key=karpenter.sh/discovery,Value=$CLUSTER_NAME \
+  --region $REGION
+```
+
+### 1c. Verify both tags are applied
+
+> **Important**: If either of these commands returns an empty table, Karpenter's `EC2NodeClass` will fail with `SubnetsNotFound` or `SecurityGroupsNotFound`. Do not proceed to Step 2 until both return results.
+
+```bash
+# Verify subnet tags
+echo "--- Tagged Subnets ---"
+aws ec2 describe-subnets \
+  --filters "Name=tag:karpenter.sh/discovery,Values=$CLUSTER_NAME" \
+  --query "Subnets[*].{ID:SubnetId,Name:Tags[?Key=='Name']|[0].Value}" \
+  --output table --region $REGION
+
+# Verify security group tags
+echo "--- Tagged Security Groups ---"
+aws ec2 describe-security-groups \
+  --filters "Name=tag:karpenter.sh/discovery,Values=$CLUSTER_NAME" \
+  --query "SecurityGroups[*].{ID:GroupId,Name:GroupName}" \
+  --output table --region $REGION
 ```
 
 ---
@@ -77,7 +149,60 @@ aws iam attach-role-policy --role-name KarpenterNodeRole-student1 --policy-arn a
 aws iam attach-role-policy --role-name KarpenterNodeRole-student1 --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
 ```
 
-### 2b. Create the Karpenter Controller IAM ServiceAccount (IRSA)
+### 2b. Register the Karpenter Node Role with EKS (Mandatory)
+
+> **This step is mandatory.** Without it, Karpenter will successfully launch EC2 instances, but those nodes will never be able to authenticate to the Kubernetes API server and will never appear in `kubectl get nodes`.
+
+First, check which authentication mode your cluster uses:
+```bash
+aws eks describe-cluster \
+  --name $CLUSTER_NAME \
+  --query "cluster.accessConfig.authenticationMode" \
+  --output text --region $REGION
+```
+
+#### If the output is `API` or `API_AND_CONFIG_MAP` — use EKS Access Entries:
+```bash
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+aws eks create-access-entry \
+  --cluster-name $CLUSTER_NAME \
+  --principal-arn arn:aws:iam::${ACCOUNT_ID}:role/KarpenterNodeRole-${CLUSTER_NAME} \
+  --type EC2_LINUX \
+  --region $REGION
+```
+
+Verify it was created:
+```bash
+aws eks list-access-entries \
+  --cluster-name $CLUSTER_NAME \
+  --region $REGION \
+  --query "accessEntries" --output table
+```
+
+#### If the output is `CONFIG_MAP` — use aws-auth ConfigMap:
+```bash
+# View current aws-auth to confirm the role is not already there
+kubectl describe configmap aws-auth -n kube-system
+```
+
+Add the Karpenter Node Role under `mapRoles`:
+```bash
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+kubectl edit configmap aws-auth -n kube-system
+```
+
+Add this block under `mapRoles:` (keep existing entries, just append):
+```yaml
+    - rolearn: arn:aws:iam::<ACCOUNT_ID>:role/KarpenterNodeRole-<your-cluster-name>
+      username: system:node:{{EC2PrivateDNSName}}
+      groups:
+        - system:bootstrappers
+        - system:nodes
+```
+
+### 2c. Create the Karpenter Controller IAM ServiceAccount (IRSA)
 
 Choose **one** of the following options to bind EKS permissions to the Karpenter controller.
 
@@ -108,7 +233,7 @@ aws iam put-role-policy \
 aws iam put-role-policy \
   --role-name KarpenterControllerRole-student1 \
   --policy-name KarpenterIAMOperations \
-  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["iam:GetInstanceProfile","iam:CreateInstanceProfile","iam:AddRoleToInstanceProfile","iam:RemoveRoleFromInstanceProfile","iam:DeleteInstanceProfile","iam:TagInstanceProfile","iam:PassRole","pricing:GetProducts","ssm:GetParameter"],"Resource":"*"}]}'
+  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["iam:GetInstanceProfile","iam:CreateInstanceProfile","iam:AddRoleToInstanceProfile","iam:RemoveRoleFromInstanceProfile","iam:DeleteInstanceProfile","iam:TagInstanceProfile","iam:ListInstanceProfiles","iam:PassRole","pricing:GetProducts","ssm:GetParameter"],"Resource":"*"}]}'
 ```
 
 ---
@@ -131,7 +256,7 @@ Use this option to manually set up OIDC identity federation and deploy the Servi
         {
           "Effect": "Allow",
           "Principal": {
-            "Federated": "arn:aws:iam://${ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER}"
+            "Federated": "arn:aws:iam::${ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER}"
           },
           "Action": "sts:AssumeRoleWithWebIdentity",
           "Condition": {
@@ -168,7 +293,7 @@ Use this option to manually set up OIDC identity federation and deploy the Servi
     aws iam put-role-policy \
       --role-name KarpenterControllerRole-student1 \
       --policy-name KarpenterIAMOperations \
-      --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["iam:GetInstanceProfile","iam:CreateInstanceProfile","iam:AddRoleToInstanceProfile","iam:RemoveRoleFromInstanceProfile","iam:DeleteInstanceProfile","iam:TagInstanceProfile","iam:PassRole","pricing:GetProducts","ssm:GetParameter"],"Resource":"*"}]}'
+      --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["iam:GetInstanceProfile","iam:CreateInstanceProfile","iam:AddRoleToInstanceProfile","iam:RemoveRoleFromInstanceProfile","iam:DeleteInstanceProfile","iam:TagInstanceProfile","iam:ListInstanceProfiles","iam:PassRole","pricing:GetProducts","ssm:GetParameter"],"Resource":"*"}]}'
     ```
 
 4.  **Create the Namespace**:
@@ -212,7 +337,7 @@ Use this option to manually set up OIDC identity federation and deploy the Servi
       --set serviceAccount.create=false \
       --set serviceAccount.name=karpenter \
       --set settings.clusterName=student1 \
-      --set controller.replicas=1 \
+      --set replicas=1 \
       --wait
     ```
 
@@ -236,7 +361,9 @@ Karpenter v1 uses stable `v1` API versions (replacing the older `v1beta1`). The 
 *   **`EC2NodeClass`** (`karpenter.k8s.aws/v1`): Defines AWS-specific node configuration — subnets, security groups, AMI alias, and storage.
 *   **`NodePool`** (`karpenter.sh/v1`): Defines scheduling constraints, instance types, CPU/memory limits, and consolidation policy.
 
-Apply the following manifest to define the default provisioning rules:
+Apply the following manifest to define the default provisioning rules.
+
+> **Important**: The `karpenter.sh/discovery` tag value in `subnetSelectorTerms` and `securityGroupSelectorTerms` **must exactly match** the `$CLUSTER_NAME` value you used when tagging in Step 1. Similarly, the `role` field must reference the Karpenter Node IAM Role name that includes your cluster name.
 
 ```bash
 cat <<EOF | kubectl apply -f -
@@ -248,13 +375,16 @@ spec:
   # Uses the latest EKS-optimized Amazon Linux 2023 AMI for your cluster version
   amiSelectorTerms:
     - alias: al2023@latest
-  role: KarpenterNodeRole-student1
+  # Replace with your actual Karpenter Node Role name
+  role: KarpenterNodeRole-<your-cluster-name>
   subnetSelectorTerms:
     - tags:
-        karpenter.sh/discovery: student1
+        # Must match the tag value used in Step 1
+        karpenter.sh/discovery: <your-cluster-name>
   securityGroupSelectorTerms:
     - tags:
-        karpenter.sh/discovery: student1
+        # Must match the tag value used in Step 1
+        karpenter.sh/discovery: <your-cluster-name>
 ---
 apiVersion: karpenter.sh/v1
 kind: NodePool
@@ -554,6 +684,27 @@ EOF
     amiSelectorTerms:
       - alias: al2023@latest
     ```
+
+### 6. Node Launches But Never Joins the Cluster (`nodeadm` retries `EC2/DescribeInstances`)
+* **Symptom**: EC2 instances appear in the AWS Console with Karpenter tags (`karpenter.sh/nodepool=default`), but `kubectl get nodes` never shows them. The node console output shows repeated log lines like:
+  ```
+  nodeadm[1950]: SDK retrying request EC2/DescribeInstances, attempt 7
+  nodeadm[1950]: SDK retrying request EC2/DescribeInstances, attempt 8
+  ```
+* **Cause**: Karpenter launched the EC2 instance into a **pod subnet** (secondary CIDR) instead of a **node subnet**. Pod subnets in EKS custom networking setups have no NAT gateway route, so the node cannot reach the EC2 or EKS API endpoints needed to bootstrap itself.
+* **Fix**:
+  1. Remove the `karpenter.sh/discovery` tag from the pod subnets:
+      ```bash
+      POD_SUBNET_IDS=$(aws ec2 describe-subnets \
+        --filters "Name=tag:karpenter.sh/discovery,Values=$CLUSTER_NAME" \
+        --query "Subnets[*].SubnetId" --output text --region $REGION)
+      aws ec2 delete-tags \
+        --resources $POD_SUBNET_IDS \
+        --tags Key=karpenter.sh/discovery \
+        --region $REGION
+      ```
+  2. Tag the **node subnets** instead (subnets whose route table has a `0.0.0.0/0 -> nat-xxx` or `igw-xxx` route). See Step 1a for how to identify and verify node subnets.
+  3. Terminate the stuck EC2 instances and let Karpenter re-provision on the correct subnets.
 
 ---
 
