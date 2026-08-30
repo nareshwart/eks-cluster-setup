@@ -298,20 +298,19 @@ Use this option to manually set up OIDC identity federation and deploy the Servi
     kubectl create namespace karpenter
     ```
 
-5.  **Create the ServiceAccount YAML file (`karpenter-sa.yaml`)**:
-    Create a file named `karpenter-sa.yaml` with the following content (replace `ACCOUNT_ID` with your actual AWS Account ID):
-    ```yaml
+5.  **Create and Apply the ServiceAccount**:
+    Run the following command to dynamically create the ServiceAccount YAML file and apply it:
+    ```bash
+    cat <<EOF > karpenter-sa.yaml
     apiVersion: v1
     kind: ServiceAccount
     metadata:
       name: karpenter
       namespace: karpenter
       annotations:
-        eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/KarpenterControllerRole-$CLUSTER_NAME
-    ```
+        eks.amazonaws.com/role-arn: arn:aws:iam::${ACCOUNT_ID}:role/KarpenterControllerRole-${CLUSTER_NAME}
+    EOF
 
-6.  **Apply the manifest**:
-    ```bash
     kubectl apply -f karpenter-sa.yaml
     ```
 
