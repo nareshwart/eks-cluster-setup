@@ -1,6 +1,8 @@
 # High-Performance Scaling with Karpenter
 
-This guide walks you through deploying **Karpenter**, a modern, high-performance Kubernetes node provisioning engine designed for AWS. Unlike the legacy Cluster Autoscaler (which works by scaling EC2 Auto Scaling Groups), Karpenter communicates directly with the EC2 API to launch correctly sized instances in under 30 seconds.
+This guide walks you through deploying **Karpenter v1.x**, a modern, high-performance Kubernetes node provisioning engine designed for AWS. Unlike the legacy Cluster Autoscaler (which works by scaling EC2 Auto Scaling Groups), Karpenter communicates directly with the EC2 API to launch correctly sized instances in under 30 seconds.
+
+> **Note**: This lab targets **Karpenter v1.14.1** (latest stable). Karpenter v1.0 promoted the API version from `v1beta1` to the stable `v1`. If you have older YAML files using `karpenter.sh/v1beta1`, update them to `karpenter.sh/v1`.
 
 ---
 
@@ -9,10 +11,11 @@ This guide walks you through deploying **Karpenter**, a modern, high-performance
 ```
 Step 1 → Tag Subnets & Security Groups for Discovery
 Step 2 → Create IAM Roles and ServiceAccount (IRSA)
-Step 3 → Install Karpenter via Helm
-Step 4 → Configure NodePool & EC2NodeClass CRDs
+Step 3 → Install Karpenter via Helm (v1.14.1)
+Step 4 → Configure NodePool & EC2NodeClass CRDs (v1 API)
 Step 5 → Test Fast Scale-Up
 Step 6 → Test Consolidation (Cost Optimization)
+Step 7 → Advanced Scaling: Spot Instances with Taints and Tolerations
 ```
 
 ---
@@ -194,18 +197,18 @@ Use this option to manually set up OIDC identity federation and deploy the Servi
 
 ---
 
-## Step 3 — Install Karpenter via Helm
+## Step 3 — Install Karpenter via Helm (v1.14.1)
 
 1.  Log in to the public Amazon ECR registry to retrieve the Helm chart:
     ```bash
     aws ecr-public get-login-password --region us-east-1 | helm registry login --username AWS --password-stdin public.ecr.aws
     ```
 
-2.  Install the Karpenter Helm chart:
+2.  Install the Karpenter Helm chart (v1.14.1 — latest stable):
     ```bash
     helm install karpenter oci://public.ecr.aws/karpenter/karpenter \
       --namespace karpenter \
-      --version 0.35.1 \
+      --version 1.14.1 \
       --set serviceAccount.create=false \
       --set serviceAccount.name=karpenter \
       --set settings.clusterName=student1 \
@@ -213,27 +216,39 @@ Use this option to manually set up OIDC identity federation and deploy the Servi
       --wait
     ```
 
+3.  Verify Karpenter is running:
+    ```bash
+    kubectl get pods -n karpenter
+    kubectl logs -n karpenter -l app.kubernetes.io/name=karpenter --tail=20
+    ```
+
+    **Expected Output:**
+    ```
+    NAME                         READY   STATUS    RESTARTS   AGE
+    karpenter-7d9f8c7bcd-x8kjp   1/1     Running   0          45s
+    ```
+
 ---
 
-## Step 4 — Configure NodePool & EC2NodeClass CRDs
+## Step 4 — Configure NodePool & EC2NodeClass CRDs (v1 API)
 
-Karpenter uses custom resources to control node provisioning:
-*   **`EC2NodeClass`**: Configures AWS-specific details like subnets, security groups, AMIs, and block devices.
-*   **`NodePool`**: Configures general scheduler limits, taints, and instance type choices.
+Karpenter v1 uses stable `v1` API versions (replacing the older `v1beta1`). The two key resources are:
+*   **`EC2NodeClass`** (`karpenter.k8s.aws/v1`): Defines AWS-specific node configuration — subnets, security groups, AMI alias, and storage.
+*   **`NodePool`** (`karpenter.sh/v1`): Defines scheduling constraints, instance types, CPU/memory limits, and consolidation policy.
 
 Apply the following manifest to define the default provisioning rules:
 
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: karpenter.k8s.aws/v1beta1
+apiVersion: karpenter.k8s.aws/v1
 kind: EC2NodeClass
 metadata:
   name: default
 spec:
-  amiFamily: AL2
-  role: KarpenterNodeRole-student1
+  # Uses the latest EKS-optimized Amazon Linux 2023 AMI for your cluster version
   amiSelectorTerms:
-    - name: "amazon-eks-node-1.30-*"
+    - alias: al2023@latest
+  role: KarpenterNodeRole-student1
   subnetSelectorTerms:
     - tags:
         karpenter.sh/discovery: student1
@@ -241,7 +256,7 @@ spec:
     - tags:
         karpenter.sh/discovery: student1
 ---
-apiVersion: karpenter.sh/v1beta1
+apiVersion: karpenter.sh/v1
 kind: NodePool
 metadata:
   name: default
@@ -259,76 +274,149 @@ spec:
           operator: In
           values: ["small", "medium", "large"]
       nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
         name: default
   limits:
     cpu: 100
   disruption:
-    consolidationPolicy: WhenUnderutilized
-    expireAfter: 720h
+    # WhenEmptyOrUnderutilized replaces the old v1beta1 "WhenUnderutilized"
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 30s
 EOF
+```
+
+Verify the CRDs were created:
+```bash
+kubectl get ec2nodeclass
+kubectl get nodepool
+```
+
+**Expected Output:**
+```
+NAME      READY   AGE
+default   True    15s
+
+NAME      NODECLASSREF   NODES   READY   AGE
+default   default        0       True    15s
 ```
 
 ---
 
 ## Step 5 — Test Fast Scale-Up
 
-Let's verify Karpenter's rapid scaling by launching a heavy deployment.
+Let's verify Karpenter's rapid scaling by deploying a workload that exceeds the cluster's current node capacity.
 
-1.  Monitor the Karpenter controller logs in a separate terminal:
-    ```bash
-    kubectl logs -n karpenter -l app.kubernetes.io/name=karpenter -f
-    ```
+### 5a. Open a live log watcher (use a second terminal window)
+```bash
+kubectl logs -n karpenter -l app.kubernetes.io/name=karpenter -f
+```
 
-2.  Create a test deployment and scale it up to 20 replicas:
-    ```bash
-    kubectl create deployment karpenter-test --image=public.ecr.aws/ecs-sample-image/amazon-ecs-sample:latest
-    kubectl scale deployment karpenter-test --replicas=20
-    ```
+### 5b. Open a live node watcher (use a third terminal window)
+```bash
+kubectl get nodes -w
+```
 
-3.  Observe Karpenter's controller logs. You will see Karpenter calculate the required compute capacity and directly trigger instance creation:
-    ```
-    found provisionable pod(s)... launching node... 
-    ```
+### 5c. Deploy a resource-hungry test workload
+In your main terminal, deploy a CPU-constrained deployment that will immediately trigger new node provisioning:
 
-4.  Check the nodes. A new node will join the cluster in approximately 30 seconds:
-    ```bash
-    kubectl get nodes -w
-    ```
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: karpenter-scale-test
+  namespace: default
+spec:
+  replicas: 20
+  selector:
+    matchLabels:
+      app: scale-test
+  template:
+    metadata:
+      labels:
+        app: scale-test
+    spec:
+      containers:
+      - name: app
+        image: nginx:alpine
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+EOF
+```
+
+### 5d. Observe what happens
+
+**In the Karpenter log window**, look for output like:
+```
+found 15 provisionable pod(s)
+computed new nodeclaim(s) to fit pod(s) ...
+created nodeclaim: default ...
+launched nodeclaim, creating instance ...
+registered nodeclaim, launched instance i-0abc123def456 ...
+initialized nodeclaim, node is Ready
+```
+
+**In the nodes window**, a new node will join the cluster in approximately **20–30 seconds**:
+```
+NAME                         STATUS   ROLES    AGE   VERSION
+ip-10-50-1-100.ec2.internal  Ready    <none>   5m    v1.30.x
+ip-10-50-2-45.ec2.internal   Ready    <none>   28s   v1.30.x   # <-- New Karpenter node!
+```
+
+### 5e. Check pod scheduling
+```bash
+kubectl get pods -l app=scale-test -o wide
+```
+Watch all 20 pods schedule across both the original nodes and the new Karpenter-provisioned node.
 
 ---
 
 ## Step 6 — Test Consolidation (Cost Optimization)
 
-One of Karpenter's key advantages is **consolidation** (automatically defragmenting workloads and terminating idle/underutilized nodes to save costs).
+One of Karpenter's key advantages is **consolidation** — automatically defragmenting workloads and terminating idle/underutilized nodes to save costs. The `consolidateAfter: 30s` setting we configured means Karpenter starts consolidating 30 seconds after a node becomes consolidatable.
 
-1.  Delete the test deployment:
-    ```bash
-    kubectl delete deployment karpenter-test
-    ```
+### 6a. Delete the test deployment
+```bash
+kubectl delete deployment karpenter-scale-test
+```
 
-2.  Watch the Karpenter logs. Within 15-30 seconds, Karpenter will detect that the node it launched is now empty and underutilized, scale the node down, and terminate the underlying EC2 instance automatically:
-    ```
-    disrupting node default/ip-10-50-x-x... terminating node...
-    ```
+### 6b. Watch the Karpenter consolidation in action
 
-3.  Verify the cluster has returned to its baseline state (only the two original worker nodes):
-    ```bash
-    kubectl get nodes
-    ```
+**In the Karpenter log window**, within ~30 seconds you will see:
+```
+disrupting node via consolidation delete, ... terminating node ip-10-50-2-45...
+```
+
+**In the nodes window**:
+```
+ip-10-50-2-45.ec2.internal   Ready    <none>   2m    v1.30.x
+ip-10-50-2-45.ec2.internal   NotReady <none>   2m    v1.30.x   # draining...
+# Node disappears from the list...
+```
+
+### 6c. Verify cluster returned to baseline
+```bash
+kubectl get nodes
+```
+Only your original managed node group nodes should remain.
 
 ---
 
 ## Step 7 — Advanced Scaling: Spot Instances with Taints and Tolerations
 
-Karpenter allows you to easily scale workloads on Spot instances to save up to 90% off On-Demand pricing. In this exercise, we will create a dedicated Spot NodePool with a custom taint, ensuring only workloads that tolerate Spot instances can run on them.
+Karpenter makes it easy to scale workloads on Spot instances (up to 90% cheaper than On-Demand) using a dedicated NodePool with taints.
 
 ### 7a. Deploy a Spot NodePool
 
-Create a new NodePool resource that targets Spot instances and has a `spot-only=true:NoSchedule` taint:
-
 ```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: karpenter.sh/v1beta1
+apiVersion: karpenter.sh/v1
 kind: NodePool
 metadata:
   name: spot
@@ -346,6 +434,8 @@ spec:
           operator: In
           values: ["small", "medium", "large"]
       nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
         name: default
       taints:
         - key: spot-only
@@ -354,8 +444,8 @@ spec:
   limits:
     cpu: 100
   disruption:
-    consolidationPolicy: WhenUnderutilized
-    expireAfter: 720h
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 30s
 EOF
 ```
 
@@ -381,11 +471,11 @@ spec:
     spec:
       containers:
       - name: web
-        image: public.ecr.aws/ecs-sample-image/amazon-ecs-sample:latest
+        image: nginx:alpine
         resources:
           requests:
             cpu: "250m"
-            memory: "512Mi"
+            memory: "256Mi"
       tolerations:
       - key: "spot-only"
         operator: "Equal"
@@ -411,7 +501,7 @@ EOF
    ```bash
    kubectl delete deployment karpenter-spot-test
    ```
-   *Within 15-30 seconds, Karpenter will automatically terminate the Spot instance because the workload is gone.*
+   *Within 30 seconds, Karpenter will automatically terminate the Spot instance because the workload is gone.*
 
 ---
 
@@ -436,7 +526,14 @@ EOF
     aws ec2 describe-subnets --filters "Name=tag:karpenter.sh/discovery,Values=student1" --query "Subnets[*].SubnetId" --region us-east-2
     aws ec2 describe-security-groups --filters "Name=tag:karpenter.sh/discovery,Values=student1" --query "SecurityGroups[*].GroupId" --region us-east-2
     ```
-  * **Incorrect NodeClass Reference**: Check your `NodePool` definition. `spec.nodeClassRef.name` must exactly match the `metadata.name` of your `EC2NodeClass` (e.g., `default`).
+  * **Incorrect nodeClassRef**: In Karpenter v1, the `nodeClassRef` requires all three fields — `group`, `kind`, and `name`. If you only specify `name:`, it will not resolve.
+    ```yaml
+    # Correct v1 format:
+    nodeClassRef:
+      group: karpenter.k8s.aws
+      kind: EC2NodeClass
+      name: default
+    ```
   * **Resource Request Limits**: Check the Karpenter logs. If you see `limits exceeded`, the node launch would violate the `limits.cpu` or `limits.memory` configured on the NodePool.
 
 ### 3. Controller Logs Show `UnauthorizedOperation` or `AccessDenied`
@@ -445,20 +542,18 @@ EOF
   * **IAM Policy Permissions**: The `KarpenterControllerRole-student1` requires EC2 permissions. If you didn't use Option A (`eksctl` with `AmazonEC2FullAccess` policy), verify that the manual IAM role has the `AmazonEC2FullAccess` policy (or equivalent scoped policy) attached.
   * **Instance Profile Missing**: Ensure the instance profile configured in Karpenter's Helm values/settings matches the Karpenter Node Role.
 
-### 4. CRD Verification Failures
-* **Symptom**: `error: resource mapping not found for name: "default" namespace: "" from "STDIN": no matches for kind "NodePool" in version "karpenter.sh/v1beta1"`.
-* **Causes**:
-  * **CRDs Not Installed**: When installing Karpenter using Helm, make sure you did not skip CRD installation. Karpenter CRDs are required to support `NodePool` and `EC2NodeClass` resources. You can apply them manually if missing:
-    ```bash
-    kubectl apply -f https://raw.githubusercontent.com/aws/karpenter-provider-aws/v0.35.1/pkg/apis/crds/karpenter.sh_nodepools.yaml
-    kubectl apply -f https://raw.githubusercontent.com/aws/karpenter-provider-aws/v0.35.1/pkg/apis/crds/karpenter.k8s.aws_ec2nodeclasses.yaml
-    ```
+### 4. CRD Version Error (v1beta1 not found)
+* **Symptom**: `error: no matches for kind "NodePool" in version "karpenter.sh/v1beta1"`.
+* **Cause**: You are using old `v1beta1` API YAML files. Karpenter v1.0+ dropped `v1beta1` support.
+* **Fix**: Update your manifests to use `karpenter.sh/v1` and `karpenter.k8s.aws/v1`. Also update the `nodeClassRef` to include the `group` and `kind` fields as shown in Step 4 above.
 
 ### 5. NodeClaim Fails with `no amis exist given constraints`
 * **Symptom**: Karpenter controller logs show `launching nodeclaim, creating instance, getting launch template configs, getting launch templates, no amis exist given constraints`.
-* **Causes**:
-  * **EKS Version / AMI Family Mismatch**: If your `EC2NodeClass` has `amiFamily` set to `AL2023`, Karpenter queries SSM Parameter Store for EKS-optimized AL2023 AMIs matching your EKS control plane version. If your cluster is running EKS version `1.27` or lower, EKS-optimized AL2023 AMIs do not exist in AWS, resulting in the failure.
-  * **Fix**: Change `amiFamily: AL2023` to `amiFamily: AL2` in your `EC2NodeClass` resource. Amazon Linux 2 (`AL2`) is universally supported by all EKS versions. Alternatively, define an explicit name filter or ID in `amiSelectorTerms`.
+* **Fix**: Use the `alias` field in `amiSelectorTerms` to let Karpenter automatically resolve the correct EKS-optimized AMI for your cluster version:
+    ```yaml
+    amiSelectorTerms:
+      - alias: al2023@latest
+    ```
 
 ---
 
