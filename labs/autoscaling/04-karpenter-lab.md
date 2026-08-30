@@ -43,11 +43,22 @@ REGION=us-east-2
 
 List all subnets and identify your **node subnets** (typically named `*node*`, `*private*`, or `*worker*` — **not** `*pods*` or `*secondary*`):
 ```bash
+# Set the name pattern matching your node subnets (e.g. *public*, *node*, *private*)
+NODE_SUBNET_PATTERN="*public*"
+
 aws ec2 describe-subnets \
+  --filters "Name=tag:Name,Values=${NODE_SUBNET_PATTERN}" \
   --query "Subnets[*].{ID:SubnetId,Name:Tags[?Key=='Name']|[0].Value,CIDR:CidrBlock}" \
   --output table \
   --region $REGION
 ```
+
+> If unsure of the pattern, omit `--filters` to list all subnets and pick the right ones from the output:
+> ```bash
+> aws ec2 describe-subnets \
+>   --query "Subnets[*].{ID:SubnetId,Name:Tags[?Key=='Name']|[0].Value,CIDR:CidrBlock}" \
+>   --output table --region $REGION
+> ```
 
 Before tagging, **verify the node subnet has a NAT gateway route** (required for EC2 API access during bootstrap):
 ```bash
