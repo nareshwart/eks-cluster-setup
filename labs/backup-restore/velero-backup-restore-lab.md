@@ -267,7 +267,7 @@ To demonstrate data restoration, we will deploy a stateful application that requ
           app: writer
       template:
         metadata:
-          matchLabels:
+          labels:
             app: writer
         spec:
           containers:
