@@ -1,0 +1,21 @@
+---
+- name: Docker System and Volume Prune on Student VMs
+  hosts: learner
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Run docker system prune (all unused images, containers, networks)
+      ansible.builtin.command: docker system prune -af
+      register: system_prune_result
+      changed_when: "'Total reclaimed space: 0B' not in system_prune_result.stdout"
+
+    - name: Run docker volume prune (all unused volumes)
+      ansible.builtin.command: docker volume prune -af
+      register: volume_prune_result
+      changed_when: "'Total reclaimed space: 0B' not in volume_prune_result.stdout"
+
+    - name: Show reclaimed space
+      ansible.builtin.debug:
+        msg:
+          - "System prune: {{ system_prune_result.stdout_lines[-1] | default('n/a') }}"
+          - "Volume prune: {{ volume_prune_result.stdout_lines[-1] | default('n/a') }}"
