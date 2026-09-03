@@ -1,0 +1,13 @@
+- name: remdir
+  hosts: learner
+  gather_facts: false
+  become: true
+  tasks:
+    - name: rm
+      shell: rm -rf /root/eks-cluster-setup
+      ignore_errors: true
+    - name: rm devops
+      shell: rm -rf /home/devops/eks-cluster-setup
+      ignore_errors: true
+    - name: reset
+      shell: kubeadm reset --force --cri-socket unix:///var/run/cri-dockerd.sock
