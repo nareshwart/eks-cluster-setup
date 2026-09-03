@@ -1,0 +1,57 @@
+---
+- name: Remote Student EKS Cluster Destruction
+  hosts: learner
+  gather_facts: false
+  become: true
+
+  vars:
+    local_log_file: "/etc/ansible/destroy-results.log"
+    # Local path to the helper script on the Trainer VM
+    local_script_path: "/etc/ansible/destroy-cluster.sh"
+    # Destination path on the Student VM
+    remote_script_path: "/tmp/destroy-cluster.sh"
+
+  tasks:
+    - name: Copy EKS teardown script to Student VM
+      ansible.builtin.copy:
+        src: "{{ local_script_path }}"
+        dest: "{{ remote_script_path }}"
+        mode: '0755'
+
+    - name: Execute EKS teardown script (Asynchronous - Fire & Forget)
+      ansible.builtin.shell: "{{ remote_script_path }}"
+      async: 1800 # Allow up to 30 minutes (1800s) for teardown script to run
+      poll: 0     # Immediately continue to next tasks/hosts
+      register: script_async
+
+    - name: Wait for teardown script to complete on Student VM
+      ansible.builtin.async_status:
+        jid: "{{ script_async.ansible_job_id }}"
+      register: script_result
+      until: script_result.finished
+      retries: 60  # Try up to 60 times
+      delay: 30    # Wait 30 seconds between retries (60 * 30s = 30 minutes total timeout)
+      ignore_errors: true
+
+    - name: Clean up remote teardown script on Student VM
+      ansible.builtin.file:
+        path: "{{ remote_script_path }}"
+        state: absent
+
+    - name: Log Success status to Trainer VM
+      ansible.builtin.lineinfile:
+        path: "{{ local_log_file }}"
+        line: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }} | {{ inventory_hostname }} ({{ ansible_host }}): DESTROY SUCCESSFUL"
+        create: true
+        mode: '0644'
+      delegate_to: localhost
+      when: script_result.finished and script_result.rc == 0
+
+    - name: Log Failure status to Trainer VM
+      ansible.builtin.lineinfile:
+        path: "{{ local_log_file }}"
+        line: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }} | {{ inventory_hostname }} ({{ ansible_host }}): DESTROY FAILED | Error: {{ script_result.stderr | default(script_result.stdout) | default('Timeout') | truncate(150) }}"
+        create: true
+        mode: '0644'
+      delegate_to: localhost
+      when: not script_result.finished or script_result.rc != 0
