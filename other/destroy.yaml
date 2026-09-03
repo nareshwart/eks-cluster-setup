@@ -1,0 +1,64 @@
+---
+- name: Remote Student EKS Cluster Destruction
+  hosts: learner
+  gather_facts: false
+  become: true
+  vars:
+    local_log_file: "/etc/ansible/destroy_results.log"
+    repo_url: "https://github.com/nareshwart/eks-cluster-setup.git"
+    temp_dir: "/tmp/eks-code"
+
+  tasks:
+    - name: Ensure clean state by removing any existing temp folder
+      ansible.builtin.file:
+        path: "{{ temp_dir }}"
+        state: absent
+
+    - name: Clone EKS platform repository to temp directory
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ temp_dir }}"
+        version: main
+        depth: 1 # Shallow clone to make the download fast
+
+    - name: Trigger EKS Teardown (Asynchronous - Fire & Forget)
+      ansible.builtin.shell: |
+        terraform init
+        terraform destroy -state=/var/tmp/tfstate/terraform.tfstate -auto-approve
+      args:
+        chdir: "{{ temp_dir }}/terraform/03-examples/single-cluster"
+      async: 1800 # Allow up to 30 minutes (1800s) for terraform destroy to run
+      poll: 0     # 0 means start the command and immediately continue to next tasks/hosts
+      register: tf_destroy_async
+
+    - name: Wait for EKS Teardown to complete on Student VM
+      ansible.builtin.async_status:
+        jid: "{{ tf_destroy_async.ansible_job_id }}"
+      register: tf_destroy
+      until: tf_destroy.finished
+      retries: 60  # Try up to 60 times
+      delay: 30    # Wait 30 seconds between retries (60 * 30s = 30 minutes total timeout)
+      ignore_errors: true
+
+    - name: Clean up temporary clone directory
+      ansible.builtin.file:
+        path: "{{ temp_dir }}"
+        state: absent
+
+    - name: Log Success status to Trainer VM
+      ansible.builtin.lineinfile:
+        path: "{{ local_log_file }}"
+        line: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }} | {{ inventory_hostname }} ({{ ansible_host }}): DESTROY SUCCESSFUL"
+        create: true
+        mode: '0644'
+      delegate_to: localhost
+      when: tf_destroy.finished and tf_destroy.rc == 0
+
+    - name: Log Failure status to Trainer VM
+      ansible.builtin.lineinfile:
+        path: "{{ local_log_file }}"
+        line: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }} | {{ inventory_hostname }} ({{ ansible_host }}): DESTROY FAILED | Error: {{ tf_destroy.stderr | default(tf_destroy.stdout) | default('Timeout') | truncate(150) }}"
+        create: true
+        mode: '0644'
+      delegate_to: localhost
+      when: not tf_destroy.finished or tf_destroy.rc != 0
